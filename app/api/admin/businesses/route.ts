@@ -1,12 +1,18 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+export async function GET(req: NextRequest) {
+  const authHeader = req.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '');
+  if (!token) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user) return NextResponse.json({ error: 'Sesyon envalid' }, { status: 401 });
 
   const { data: admin } = await supabase
     .from('businesses').select('is_admin').eq('id', user.id).single();
@@ -19,4 +25,4 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
-}  
+}

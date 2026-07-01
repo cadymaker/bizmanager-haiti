@@ -1,12 +1,20 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
+function getSupabase(req: NextRequest) {
+  const token = req.headers.get('Authorization')?.replace('Bearer ', '');
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  return { supabase, token };
+}
+
 export async function GET(req: NextRequest) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+  const { supabase, token } = getSupabase(req);
+  if (!token) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user) return NextResponse.json({ error: 'Sesyon envalid' }, { status: 401 });
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
@@ -25,10 +33,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+  const { supabase, token } = getSupabase(req);
+  if (!token) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
+  const { data: { user } } = await supabase.auth.getUser(token);
+  if (!user) return NextResponse.json({ error: 'Sesyon envalid' }, { status: 401 });
 
   const body = await req.json();
   const { client_id, niche_template = 'retail', issue_date, due_date, tax_rate = 0, notes, currency = 'HTG', metadata = {} } = body;
@@ -55,4 +63,4 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data, { status: 201 });
-}  
+}

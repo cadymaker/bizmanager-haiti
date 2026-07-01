@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
-import { cookies } from 'next/headers';
+import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(req: NextRequest) {
@@ -9,14 +8,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Tout chan obligatwa yo dwe ranpli.' }, { status: 400 });
   }
 
-  const cookieStore = cookies();
-  const supabase = createRouteHandlerClient({ cookies: () => cookieStore });
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-
+  const { data: authData, error: authError } = await supabase.auth.signUp({ email, password });
   if (authError || !authData.user) {
     return NextResponse.json({ error: authError?.message ?? 'Erè enskripsyon.' }, { status: 400 });
   }
@@ -35,4 +32,4 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ success: true, message: 'Kont kreye! Esè gratis 14 jou kòmanse jodi a.' });
-}  
+}
