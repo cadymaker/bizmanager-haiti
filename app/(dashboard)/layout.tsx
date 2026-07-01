@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import Sidebar from '@/components/layout/Sidebar';
+import Sidebar from '@/components/layout/Sidebar'; 
+import InstallPrompt from '@/components/InstallPrompt';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [businessName, setBusinessName] = useState('');
@@ -83,8 +84,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="font-semibold text-gray-800 truncate">{businessName}</span>
         </div>
 
-        <main className="flex-1 overflow-auto">{children}</main>
+  <main className="flex-1 overflow-auto">{children}</main>
       </div>
+      <InstallPrompt />
     </div>
   );
 }
