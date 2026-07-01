@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   if (!admin?.is_admin) return NextResponse.json({ error: 'Aksè refize' }, { status: 403 });
 
   const { businessId, duration } = await req.json() as { businessId: string; duration: LicenseDuration };
-  if (!businessId || !['30days', '1year'].includes(duration)) {
+ if (!businessId || !['30days', '90days', '1year'].includes(duration)) {
     return NextResponse.json({ error: 'Done envalid' }, { status: 400 });
   }
 

@@ -8,6 +8,7 @@ const nav = [
   { href: '/invoices', label: 'Factures' },
   { href: '/clients', label: 'Clients / Dèt' },
   { href: '/expenses', label: 'Depans' },
+  { href: '/subscribe', label: 'Achte lisans' },
   { href: '/settings', label: 'Paramèt' },
 ];
 

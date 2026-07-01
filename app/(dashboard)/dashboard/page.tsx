@@ -68,7 +68,7 @@ export default function DashboardPage() {
       {trialDays !== null && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-700 text-sm flex items-center justify-between">
           <span>Esè gratis — <strong>{trialDays} jou rete.</strong></span>
-          <a href="/settings" className="underline font-medium">Aktive lisans →</a>
+          <a href="/subscribe" className="underline font-medium">Achte lisans →</a>
         </div>
       )}
 
@@ -126,7 +126,9 @@ export default function DashboardPage() {
             )}
             {invoices.map(inv => (
               <tr key={inv.id} className="hover:bg-gray-50">
-                <td className="px-4 py-2 font-mono text-blue-600 text-xs">{inv.invoice_number}</td>
+                <td className="px-4 py-2 font-mono text-blue-600 text-xs">
+                  <a href={`/invoices/${inv.id}`} className="hover:underline">{inv.invoice_number}</a>
+                </td>
                 <td className="px-4 py-2">{inv.client?.name ?? '—'}</td>
                 <td className="px-4 py-2">{fmt(inv.total_amount)}</td>
                 <td className="px-4 py-2">

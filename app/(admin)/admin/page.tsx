@@ -3,13 +3,29 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Business } from '@/types';
 
+interface PaymentRequest {
+  id: string;
+  business_id: string;
+  plan: string;
+  amount: number;
+  duration: string;
+  payment_method: string;
+  receipt_url: string | null;
+  status: string;
+  created_at: string;
+  business?: { business_name: string; email: string; phone: string };
+}
+
 export default function AdminDashboard() {
   const [businesses, setBusinesses] = useState<Business[]>([]);
+  const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Business | null>(null);
-  const [duration, setDuration] = useState<'30days' | '1year'>('30days');
+ const [duration, setDuration] = useState<'30days' | '90days' | '1year'>('30days');
   const [code, setCode] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
+  const [processing, setProcessing] = useState<string | null>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -25,7 +41,32 @@ export default function AdminDashboard() {
       .select('id, business_name, owner_name, email, phone, niche, license_status, trial_start_date, license_expiry_date, created_at')
       .order('created_at', { ascending: false });
     setBusinesses((data as any) ?? []);
+
+    const { data: reqs } = await supabase
+      .from('payment_requests')
+      .select('*, business:businesses(business_name, email, phone)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false });
+    setRequests((reqs as any) ?? []);
+
     setLoading(false);
+  }
+
+  async function handleRequest(reqId: string, action: 'approve' | 'reject') {
+    setProcessing(reqId);
+    setMsg('');
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setProcessing(null); return; }
+    const res = await fetch('/api/admin/approve-payment', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ requestId: reqId, action }),
+    });
+    const data = await res.json();
+    if (res.ok) { setMsg(data.message); load(); }
+    else { setMsg('Erè: ' + (data.error ?? 'pa ka trete')); }
+    setProcessing(null);
   }
 
   async function generate() {
@@ -42,9 +83,9 @@ export default function AdminDashboard() {
     if (res.ok) { setCode(data.code); } else { setCode('Erè: ' + (data.error ?? 'pa ka jenere')); }
   }
 
-  function buildMessage() {
-    const dur = duration === '30days' ? '30 jou' : '1 an';
-    return `Bonjou ${selected?.business_name}! Men kod aktivasyon lisans ou pou ${dur}: ${code}. Ale nan Parametr, antre kod la, epi klike Aktive. Mesi! BizManager Haiti`;
+ function buildMessage() {
+    const dur = duration === '30days' ? '30 jou' : duration === '90days' ? '90 jou' : '1 an';
+    return `Bonjou ${selected?.business_name}! Men kod aktivasyon lisans ou pou ${dur}: ${code}. Ale nan Parametr nan aplikasyon an, antre kod la, epi klike Aktive. Mesi pou konfyans ou! BizManager Haiti`;
   }
 
   function buildWhatsAppLink() {
@@ -63,6 +104,8 @@ export default function AdminDashboard() {
     return Math.max(0, Math.ceil((end.getTime() - Date.now()) / 86400000));
   }
 
+  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n ?? 0) + ' HTG';
+
   if (error) return (
     <div className="p-6"><div className="bg-red-50 text-red-600 rounded-xl p-4">{error}</div></div>
   );
@@ -79,6 +122,10 @@ export default function AdminDashboard() {
         </a>
       </div>
 
+      {msg && (
+        <div className="bg-blue-50 text-blue-700 text-sm rounded-lg p-3">{msg}</div>
+      )}
+
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border p-4">
           <p className="text-xs text-gray-500 uppercase">Esè aktif</p>
@@ -93,6 +140,46 @@ export default function AdminDashboard() {
           <p className="text-2xl font-semibold mt-1 text-red-600">{businesses.filter(b => b.license_status === 'expired').length}</p>
         </div>
       </div>
+
+      {requests.length > 0 && (
+        <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
+          <div className="px-4 py-3 bg-amber-50 border-b border-amber-200">
+            <h2 className="font-medium text-amber-800">Demann peman ({requests.length})</h2>
+            <p className="text-xs text-amber-600 mt-0.5">Verifye peman an, epi klike Apwouve pou aktive lisans lan otomatikman.</p>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {requests.map(r => (
+              <div key={r.id} className="p-4 flex flex-col sm:flex-row gap-4 items-start">
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-gray-900">{r.business?.business_name ?? '—'}</div>
+                  <div className="text-xs text-gray-400 break-all">{r.business?.email} · {r.business?.phone}</div>
+                  <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
+                    <span className="font-medium">{r.duration}</span>
+                    <span className="text-blue-600">{fmt(r.amount)}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs capitalize">{r.payment_method}</span>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleString('fr-HT')}</div>
+                </div>
+                {r.receipt_url && (
+                  <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+                    <img src={r.receipt_url} alt="Resi" className="w-20 h-20 object-cover rounded-lg border border-gray-200 hover:opacity-80" />
+                  </a>
+                )}
+                <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
+                  <button onClick={() => handleRequest(r.id, 'approve')} disabled={processing === r.id}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 disabled:opacity-50">
+                    {processing === r.id ? '...' : 'Apwouve'}
+                  </button>
+                  <button onClick={() => handleRequest(r.id, 'reject')} disabled={processing === r.id}
+                    className="flex-1 px-4 py-2 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200 disabled:opacity-50">
+                    Refize
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border overflow-hidden">
         <table className="w-full text-sm">
@@ -145,11 +232,15 @@ export default function AdminDashboard() {
             <h2 className="font-semibold text-gray-900">Kòd pou {selected.business_name}</h2>
             <div className="flex gap-2">
               <button onClick={() => { setDuration('30days'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-sm border ${duration === '30days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '30days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
                 30 jou
               </button>
+              <button onClick={() => { setDuration('90days'); setCode(null); }}
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '90days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                90 jou
+              </button>
               <button onClick={() => { setDuration('1year'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-sm border ${duration === '1year' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '1year' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
                 1 an
               </button>
             </div>
