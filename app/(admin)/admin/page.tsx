@@ -68,6 +68,23 @@ export default function AdminDashboard() {
     else { setMsg('Erè: ' + (data.error ?? 'pa ka trete')); }
     setProcessing(null);
   }
+  async function revokeLicense(businessId: string, name: string) {
+    if (!confirm(`Èske ou vle revoke lisans ${name}? App la ap bloke pou li jiskaske li peye ankò.`)) return;
+    setProcessing(businessId);
+    setMsg('');
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setProcessing(null); return; }
+    const res = await fetch('/api/admin/revoke-license', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ businessId }),
+    });
+    const data = await res.json();
+    if (res.ok) { setMsg(data.message); load(); }
+    else { setMsg('Erè: ' + (data.error ?? 'pa ka revoke')); }
+    setProcessing(null);
+  }
 
   async function generate() {
     if (!selected) return;
@@ -215,10 +232,19 @@ export default function AdminDashboard() {
                   </span>
                 </td>
                 <td className="px-4 py-3">
-                  <button onClick={() => { setSelected(b); setCode(null); }}
-                    className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700">
-                    Jenere kòd
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => { setSelected(b); setCode(null); }}
+                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700">
+                      Jenere kòd
+                    </button>
+                    {b.license_status === 'active' && (
+                      <button onClick={() => revokeLicense(b.id, b.business_name)}
+                        disabled={processing === b.id}
+                        className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 disabled:opacity-50">
+                        {processing === b.id ? '...' : 'Revoke'}
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

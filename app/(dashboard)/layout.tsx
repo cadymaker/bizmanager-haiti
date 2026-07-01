@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import Sidebar from '@/components/layout/Sidebar'; 
+import Sidebar from '@/components/layout/Sidebar';
 import InstallPrompt from '@/components/InstallPrompt';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -30,9 +30,34 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       const { data: business } = await supabase
         .from('businesses')
-        .select('business_name, is_admin')
+        .select('business_name, is_admin, license_status, license_expiry_date, trial_start_date')
         .eq('id', session.user.id)
         .single();
+
+      // Verifye si lisans lan aksesib
+      let accessible = true;
+      if (business) {
+        const now = new Date();
+        if (business.license_status === 'active' && business.license_expiry_date) {
+          accessible = new Date(business.license_expiry_date) > now;
+        } else if (business.license_status === 'trial') {
+          const trialEnd = new Date(business.trial_start_date);
+          trialEnd.setDate(trialEnd.getDate() + 14);
+          accessible = trialEnd > now;
+        } else {
+          accessible = false;
+        }
+      }
+
+      const path = window.location.pathname;
+      const allowedWhenExpired = ['/subscribe', '/settings', '/admin'];
+      const isAllowed = allowedWhenExpired.some(p => path.startsWith(p));
+
+      // Admin toujou gen aksè
+      if (!accessible && !business?.is_admin && !isAllowed) {
+        window.location.href = '/subscribe';
+        return;
+      }
 
       setBusinessName(business?.business_name ?? '');
       setIsAdmin(business?.is_admin ?? false);
@@ -55,7 +80,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar sou desktop, oswa lè meni louvri sou telefòn */}
       <div className={`
         fixed inset-y-0 left-0 z-40 transform transition-transform duration-200
         md:relative md:translate-x-0
@@ -64,14 +88,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <Sidebar businessName={businessName} isAdmin={isAdmin} onNavigate={() => setMenuOpen(false)} />
       </div>
 
-      {/* Fon nwa lè meni louvri sou telefòn */}
       {menuOpen && (
         <div className="fixed inset-0 bg-black/40 z-30 md:hidden"
           onClick={() => setMenuOpen(false)} />
       )}
 
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Ba anlè ak bouton meni (sèlman sou telefòn) */}
         <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-200 sticky top-0 z-20">
           <button onClick={() => setMenuOpen(true)}
             className="text-gray-700 p-1" aria-label="Meni">
@@ -84,7 +106,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <span className="font-semibold text-gray-800 truncate">{businessName}</span>
         </div>
 
-  <main className="flex-1 overflow-auto">{children}</main>
+        <main className="flex-1 overflow-auto">{children}</main>
       </div>
       <InstallPrompt />
     </div>
