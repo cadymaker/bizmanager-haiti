@@ -12,7 +12,7 @@ const nav = [
   { href: '/settings', label: 'Paramèt' },
 ];
 
-export default function Sidebar({ businessName, isAdmin, onNavigate }: { businessName: string; isAdmin: boolean; onNavigate?: () => void }) {
+export default function Sidebar({ businessName, isAdmin, niche, onNavigate }: { businessName: string; isAdmin: boolean; niche?: string; onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -30,9 +30,10 @@ export default function Sidebar({ businessName, isAdmin, onNavigate }: { busines
         <p className="font-semibold truncate mt-0.5">{businessName}</p>
         <p className="text-xs text-gray-400 mt-0.5">Gonaïves, Ayiti</p>
       </div>
+
       <nav className="flex-1 p-3 space-y-1">
         {nav.map(({ href, label }) => (
-         <Link key={href} href={href} onClick={onNavigate}
+          <Link key={href} href={href} onClick={onNavigate}
             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
               pathname.startsWith(href)
                 ? 'bg-blue-600 text-white'
@@ -41,10 +42,22 @@ export default function Sidebar({ businessName, isAdmin, onNavigate }: { busines
             {label}
           </Link>
         ))}
+
+        {niche === 'retail' && (
+          <Link href="/inventory" onClick={onNavigate}
+            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+              pathname.startsWith('/inventory')
+                ? 'bg-blue-600 text-white'
+                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+            }`}>
+            Envantè
+          </Link>
+        )}
+
         {isAdmin && (
           <>
             <div className="border-t border-gray-700 my-2" />
-            <Link href="/admin"
+            <Link href="/admin" onClick={onNavigate}
               className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                 pathname.startsWith('/admin')
                   ? 'bg-amber-600 text-white'
@@ -55,6 +68,7 @@ export default function Sidebar({ businessName, isAdmin, onNavigate }: { busines
           </>
         )}
       </nav>
+
       <div className="p-3 border-t border-gray-700">
         <button onClick={handleSignOut}
           className="w-full text-left px-3 py-2 text-sm text-gray-400 hover:bg-gray-800 hover:text-white rounded-lg">
@@ -63,4 +77,4 @@ export default function Sidebar({ businessName, isAdmin, onNavigate }: { busines
       </div>
     </aside>
   );
-} 
+}

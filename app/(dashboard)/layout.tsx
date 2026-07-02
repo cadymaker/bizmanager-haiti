@@ -5,8 +5,9 @@ import Sidebar from '@/components/layout/Sidebar';
 import InstallPrompt from '@/components/InstallPrompt';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  const [businessName, setBusinessName] = useState('');
+ const [businessName, setBusinessName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [niche, setNiche] = useState('');
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -28,9 +29,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return;
       }
 
-      const { data: business } = await supabase
+     const { data: business } = await supabase
         .from('businesses')
-        .select('business_name, is_admin, license_status, license_expiry_date, trial_start_date')
+        .select('business_name, is_admin, niche, license_status, license_expiry_date, trial_start_date')
         .eq('id', session.user.id)
         .single();
 
@@ -61,6 +62,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       setBusinessName(business?.business_name ?? '');
       setIsAdmin(business?.is_admin ?? false);
+      setNiche(business?.niche ?? '');
       setLoading(false);
     }
 
@@ -85,7 +87,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         md:relative md:translate-x-0
         ${menuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <Sidebar businessName={businessName} isAdmin={isAdmin} onNavigate={() => setMenuOpen(false)} />
+       <Sidebar businessName={businessName} isAdmin={isAdmin} niche={niche} onNavigate={() => setMenuOpen(false)} />
       </div>
 
       {menuOpen && (
