@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 export default function DashboardPage() {
   const [ownerName, setOwnerName] = useState('');
@@ -104,6 +105,35 @@ export default function DashboardPage() {
           <a href="/clients" className="underline">Wè kliyan →</a>
         </div>
       )}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h2 className="font-medium text-gray-800 mb-4">Rezime finansye</h2>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            <BarChart
+              data={[
+                { name: 'Ventes', valè: metrics?.total_sales ?? 0, koulè: '#16a34a' },
+                { name: 'Investisman', valè: metrics?.total_investments ?? 0, koulè: '#d97706' },
+                { name: 'Depans', valè: metrics?.total_expenses ?? 0, koulè: '#dc2626' },
+                { name: 'Benefis', valè: metrics?.net_profit ?? 0, koulè: (metrics?.net_profit ?? 0) >= 0 ? '#2563eb' : '#dc2626' },
+              ]}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+            >
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11 }} width={70}
+                tickFormatter={(v) => new Intl.NumberFormat('fr-HT', { notation: 'compact' }).format(v)} />
+             <Tooltip formatter={(v: number) => fmt(v)} cursor={false} />
+              <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
+                {[
+                  '#16a34a', '#d97706', '#dc2626',
+                  (metrics?.net_profit ?? 0) >= 0 ? '#2563eb' : '#dc2626',
+                ].map((c, i) => (
+                  <Cell key={i} fill={c} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
