@@ -156,8 +156,8 @@ export default function SettingsPage() {
             {loading ? '...' : 'Aktive'}
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-3">
-          Tarif: 30 jou — 500 HTG | 1 an — 4 000 HTG. Peman: MonCash oswa Cash.
+       <p className="text-xs text-gray-400 mt-3">
+          Tarif: 30 jou — 1 000 HTG | 90 jou — 2 500 HTG | 1 an — 10 000 HTG. Peman: MonCash oswa Cash.
         </p>
       </div>
     </div>

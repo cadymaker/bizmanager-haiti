@@ -229,7 +229,13 @@ export default function InvoicesPage() {
                     inv.status === 'partial' ? 'bg-orange-100 text-orange-700' :
                     inv.status === 'sent' ? 'bg-blue-100 text-blue-700' :
                     'bg-gray-100 text-gray-600'
-                  }`}>{inv.status}</span>
+                  }`}>{
+                    inv.status === 'paid' ? 'Peye' :
+                    inv.status === 'partial' ? 'Pasyèl' :
+                    inv.status === 'sent' ? 'Voye' :
+                    inv.status === 'draft' ? 'Bouyon' :
+                    inv.status === 'cancelled' ? 'Anile' : inv.status
+                  }</span>
                 </td>
               </tr>
             ))}

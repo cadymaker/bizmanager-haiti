@@ -140,7 +140,7 @@ export default function InvoiceDetailPage() {
             </div>
           </div>
           <div className="text-right">
-            <div className="text-2xl font-bold text-blue-600">FACTURE</div>
+           <div className="text-2xl font-bold text-blue-600">FAKTI</div>
             <div className="text-sm font-mono text-gray-700 mt-1">{invoice.invoice_number}</div>
             <div className="text-sm text-gray-500 mt-1">
               {new Date(invoice.issue_date).toLocaleDateString('fr-HT')}
@@ -152,7 +152,7 @@ export default function InvoiceDetailPage() {
 
         {invoice.client && (
           <div className="mb-6">
-            <p className="text-xs uppercase text-gray-400">Facturé à</p>
+            <p className="text-xs uppercase text-gray-400">Fakti pou</p>
             <p className="font-semibold">{invoice.client.name}</p>
             {invoice.client.phone && <p className="text-sm text-gray-500">{invoice.client.phone}</p>}
             {invoice.client.address && <p className="text-sm text-gray-500">{invoice.client.address}</p>}
