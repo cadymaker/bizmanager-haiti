@@ -8,6 +8,7 @@ export default function ClientsPage() {
   const [form, setForm] = useState({ name: '', phone: '', address: '' });
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+  const [businessName, setBusinessName] = useState('');
 
   useEffect(() => { loadClients(); }, []);
 
@@ -16,6 +17,13 @@ export default function ClientsPage() {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setLoading(false); return; }
+
+    const { data: biz } = await supabase
+      .from('businesses')
+      .select('business_name')
+      .eq('id', session.user.id)
+      .single();
+    setBusinessName(biz?.business_name ?? '');
 
     const { data } = await supabase
       .from('clients')
@@ -51,6 +59,13 @@ export default function ClientsPage() {
     }
   }
 
+  function sendReminder(c: Client) {
+    const phone = (c.phone ?? '').replace(/[^0-9]/g, '');
+    const montan = new Intl.NumberFormat('fr-HT').format(c.total_debt) + ' HTG';
+    const mesaj = `Bonjou ${c.name}! Sa se yon ti rapèl zanmitay: ou gen yon balans ki rete pou peye ki se ${montan}. Mèsi anpil pou konfyans ou. — ${businessName}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mesaj)}`, '_blank');
+  }
+
   const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n) + ' HTG';
 
   return (
@@ -66,7 +81,7 @@ export default function ClientsPage() {
           <input placeholder="Non kliyan *" required
             className="flex-1 min-w-32 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <input placeholder="Telefòn"
+          <input placeholder="Telefòn" 
             className="flex-1 min-w-32 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
           <input placeholder="Adrès"
@@ -77,24 +92,26 @@ export default function ClientsPage() {
             Ajoute
           </button>
         </form>
+        <p className="text-xs text-gray-400 mt-2">Konsèy: ajoute telefòn kliyan an (+509...) pou w ka voye rapèl WhatsApp.</p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm min-w-[500px]">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
               <th className="px-4 py-3">Non</th>
               <th className="px-4 py-3">Telefòn</th>
               <th className="px-4 py-3">Adrès</th>
               <th className="px-4 py-3">Dèt</th>
+              <th className="px-4 py-3">Rapèl</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
             )}
             {!loading && clients.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-6 text-center text-gray-400">Pa gen kliyan toujou.</td></tr>
+              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Pa gen kliyan toujou.</td></tr>
             )}
             {clients.map(c => (
               <tr key={c.id} className="hover:bg-gray-50">
@@ -103,6 +120,17 @@ export default function ClientsPage() {
                 <td className="px-4 py-3 text-gray-500">{c.address || '—'}</td>
                 <td className={`px-4 py-3 font-medium ${c.total_debt > 0 ? 'text-orange-600' : 'text-green-600'}`}>
                   {c.total_debt > 0 ? fmt(c.total_debt) : 'Soldé'}
+                </td>
+                <td className="px-4 py-3">
+                  {c.total_debt > 0 && c.phone && (
+                    <button onClick={() => sendReminder(c)}
+                      className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs hover:bg-green-700 whitespace-nowrap">
+                      Rapèl WhatsApp
+                    </button>
+                  )}
+                  {c.total_debt > 0 && !c.phone && (
+                    <span className="text-xs text-gray-400">Pa gen telefòn</span>
+                  )}
                 </td>
               </tr>
             ))}
