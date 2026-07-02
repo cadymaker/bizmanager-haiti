@@ -121,7 +121,7 @@ export default function DashboardPage() {
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 11 }} width={70}
                 tickFormatter={(v) => new Intl.NumberFormat('fr-HT', { notation: 'compact' }).format(v)} />
-             <Tooltip formatter={(v: number) => fmt(v)} cursor={false} />
+             <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
               <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
                 {[
                   '#16a34a', '#d97706', '#dc2626',
