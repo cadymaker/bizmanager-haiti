@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { formatMoney } from '@/lib/currency';
 
 interface Item { name: string; quantity: number; unit_price: number; total: number; }
 
@@ -137,7 +138,7 @@ async function deleteInvoice() {
     pdf.save(`${invoice?.invoice_number}.pdf`);
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n ?? 0) + ' HTG';
+  const fmt = (n: number) => formatMoney(n, invoice?.currency);
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
   if (!invoice) return <div className="p-6 text-gray-400">Fakti pa jwenn.</div>;
@@ -262,7 +263,7 @@ async function deleteInvoice() {
         </p>
         {invoice.balance_due > 0 ? (
           <div className="flex gap-2">
-            <input type="number" placeholder="Montan peman (HTG)"
+            <input type="number" placeholder="Montan peman"
               value={payAmount} onChange={e => setPayAmount(e.target.value)}
               className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
             <button onClick={recordPayment}

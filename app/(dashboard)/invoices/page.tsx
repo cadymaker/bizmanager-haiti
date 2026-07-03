@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 
 interface Item {
   name: string;
@@ -29,6 +30,7 @@ export default function InvoicesPage() {
   const [showForm, setShowForm] = useState(false);
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
+  const [currency, setCurrency] = useState('HTG');
 
   const [clientId, setClientId] = useState('');
   const [items, setItems] = useState<Item[]>([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
@@ -41,6 +43,13 @@ export default function InvoicesPage() {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setLoading(false); return; }
+
+    const { data: biz } = await supabase
+      .from('businesses')
+      .select('currency')
+      .eq('id', session.user.id)
+      .single();
+    setCurrency(biz?.currency ?? 'HTG');
 
     const { data: inv } = await supabase
       .from('invoices')
@@ -72,7 +81,6 @@ export default function InvoicesPage() {
     setItems(copy);
   }
 
-  // Lè yon pwodwi chwazi nan lis la, ranpli non ak pri otomatik
   function selectProduct(i: number, productId: string) {
     const copy = [...items];
     if (productId === '') {
@@ -108,7 +116,6 @@ export default function InvoicesPage() {
       return;
     }
 
-    // VERIFYE STOCK: pou chak atik ki soti nan envantè, tcheke si gen ase
     for (const it of validItems) {
       if (it.product_id) {
         const prod = products.find(p => p.id === it.product_id);
@@ -137,7 +144,7 @@ export default function InvoicesPage() {
       tax_amount: 0,
       total_amount: finalTotal,
       amount_paid: 0,
-      currency: 'HTG',
+      currency: currency,
       status: 'sent',
       metadata: {
         items: validItems.map(it => ({
@@ -157,7 +164,6 @@ export default function InvoicesPage() {
       return;
     }
 
-    // DESANN STOCK: pou chak atik ki soti nan envantè
     for (const it of validItems) {
       if (it.product_id) {
         const prod = products.find(p => p.id === it.product_id);
@@ -180,7 +186,8 @@ export default function InvoicesPage() {
     setTimeout(() => setMsg(''), 3000);
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n ?? 0) + ' HTG';
+  const fmt = (n: number) => formatMoney(n, currency);
+  const sym = currencySymbol(currency);
 
   return (
     <div className="p-6 space-y-6">
@@ -209,7 +216,7 @@ export default function InvoicesPage() {
 
           <div>
             <label className="text-xs text-gray-500 font-medium">Atik yo</label>
-            <p className="text-xs text-gray-400 mb-2">Chwazi yon pwodwi nan envantè a, oswa tape yon atik lib.</p>
+            <p className="text-xs text-gray-400 mb-2">Chwazi yon pwodwi nan envantè a, oswa tape yon atik lib. (Pri an {sym})</p>
             <div className="space-y-3 mt-1">
               {items.map((it, i) => (
                 <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
@@ -229,10 +236,10 @@ export default function InvoicesPage() {
                       onChange={e => updateItem(i, 'name', e.target.value)}
                       readOnly={!!it.product_id}
                       className={`flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
-                    <input type="number" placeholder="Qté" value={it.quantity} min="1"
+                    <input type="number" placeholder="Qté" value={it.quantity === 0 ? '' : it.quantity} min="1"
                       onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
                       className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
-                    <input type="number" placeholder="Pri" value={it.unit_price}
+                    <input type="number" placeholder="Pri" value={it.unit_price === 0 ? '' : it.unit_price}
                       onChange={e => updateItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
                       readOnly={!!it.product_id}
                       className={`w-24 px-2 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
@@ -255,8 +262,8 @@ export default function InvoicesPage() {
               <span className="text-sm font-medium w-28 text-right">{fmt(subtotal)}</span>
             </div>
             <div className="flex justify-end items-center gap-4">
-              <span className="text-sm text-gray-500">Rabè (HTG):</span>
-              <input type="number" value={discount}
+              <span className="text-sm text-gray-500">Rabè ({sym}):</span>
+              <input type="number" value={discount === 0 ? '' : discount} placeholder="0"
                 onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
                 className="w-28 px-2 py-1 border border-gray-200 rounded-lg text-sm text-right" />
             </div>

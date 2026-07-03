@@ -2,9 +2,11 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { formatMoney } from '@/lib/currency';
 
 export default function DashboardPage() {
   const [ownerName, setOwnerName] = useState('');
+  const [currency, setCurrency] = useState('HTG');
   const [metrics, setMetrics] = useState<{
     total_sales: number;
     total_investments: number;
@@ -30,12 +32,13 @@ export default function DashboardPage() {
 
       const { data: business } = await supabase
         .from('businesses')
-        .select('owner_name, trial_start_date, license_status')
+        .select('owner_name, currency, trial_start_date, license_status')
         .eq('id', session.user.id)
         .single();
 
       if (business) {
         setOwnerName(business.owner_name);
+        setCurrency(business.currency ?? 'HTG');
         if (business.license_status === 'trial') {
           const start = new Date(business.trial_start_date);
           const end = new Date(start);
@@ -62,7 +65,7 @@ export default function DashboardPage() {
     load();
   }, []);
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n ?? 0) + ' HTG';
+  const fmt = (n: number) => formatMoney(n, currency);
 
   return (
     <div className="p-6 space-y-6">
@@ -99,29 +102,23 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {(metrics?.total_receivables ?? 0) > 0 && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-700 text-sm flex justify-between">
-          <span>Dèt kliyan: <strong>{fmt(metrics?.total_receivables ?? 0)}</strong></span>
-          <a href="/clients" className="underline">Wè kliyan →</a>
-        </div>
-      )}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h2 className="font-medium text-gray-800 mb-4">Rezime finansye</h2>
         <div style={{ width: '100%', height: 260 }}>
           <ResponsiveContainer>
             <BarChart
               data={[
-                { name: 'Ventes', valè: metrics?.total_sales ?? 0, koulè: '#16a34a' },
-                { name: 'Investisman', valè: metrics?.total_investments ?? 0, koulè: '#d97706' },
-                { name: 'Depans', valè: metrics?.total_expenses ?? 0, koulè: '#dc2626' },
-                { name: 'Benefis', valè: metrics?.net_profit ?? 0, koulè: (metrics?.net_profit ?? 0) >= 0 ? '#2563eb' : '#dc2626' },
+                { name: 'Ventes', valè: metrics?.total_sales ?? 0 },
+                { name: 'Investisman', valè: metrics?.total_investments ?? 0 },
+                { name: 'Depans', valè: metrics?.total_expenses ?? 0 },
+                { name: 'Benefis', valè: metrics?.net_profit ?? 0 },
               ]}
               margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
             >
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 11 }} width={70}
                 tickFormatter={(v) => new Intl.NumberFormat('fr-HT', { notation: 'compact' }).format(v)} />
-             <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
+              <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
               <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
                 {[
                   '#16a34a', '#d97706', '#dc2626',
@@ -135,12 +132,19 @@ export default function DashboardPage() {
         </div>
       </div>
 
-     <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      {(metrics?.total_receivables ?? 0) > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-700 text-sm flex justify-between">
+          <span>Dèt kliyan: <strong>{fmt(metrics?.total_receivables ?? 0)}</strong></span>
+          <a href="/clients" className="underline">Wè kliyan →</a>
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
           <h2 className="font-medium text-gray-800">Factures resan</h2>
           <a href="/invoices" className="text-sm text-blue-600 hover:underline">Wè tout →</a>
         </div>
-        <table className="w-full text-sm">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
               <th className="px-4 py-2">Numewo</th>

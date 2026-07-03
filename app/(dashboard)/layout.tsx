@@ -31,7 +31,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
      const { data: business } = await supabase
         .from('businesses')
-        .select('business_name, is_admin, niche, license_status, license_expiry_date, trial_start_date')
+        .select('business_name, is_admin, niche, currency, license_status, license_expiry_date, trial_start_date')
         .eq('id', session.user.id)
         .single();
 
@@ -49,11 +49,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           accessible = false;
         }
       }
+const path = window.location.pathname;
 
-      const path = window.location.pathname;
+      // Si biznis pa gen devise chwazi, voye l chwazi youn (sof si li deja sou paj la)
+      if (business && !business.currency && !path.startsWith('/choose-currency')) {
+        window.location.href = '/choose-currency';
+        return;
+      }
+
       const allowedWhenExpired = ['/subscribe', '/settings', '/admin'];
       const isAllowed = allowedWhenExpired.some(p => path.startsWith(p));
-
       // Admin toujou gen aksè
       if (!accessible && !business?.is_admin && !isAllowed) {
         window.location.href = '/subscribe';

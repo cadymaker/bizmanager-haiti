@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Client } from '@/types';
+import { formatMoney } from '@/lib/currency';
 
 export default function ClientsPage() {
   const [clients, setClients] = useState<Client[]>([]);
@@ -9,6 +10,7 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
   const [businessName, setBusinessName] = useState('');
+  const [currency, setCurrency] = useState('HTG');
 
   useEffect(() => { loadClients(); }, []);
 
@@ -20,10 +22,11 @@ export default function ClientsPage() {
 
     const { data: biz } = await supabase
       .from('businesses')
-      .select('business_name')
+      .select('business_name, currency')
       .eq('id', session.user.id)
       .single();
     setBusinessName(biz?.business_name ?? '');
+    setCurrency(biz?.currency ?? 'HTG');
 
     const { data } = await supabase
       .from('clients')
@@ -61,12 +64,12 @@ export default function ClientsPage() {
 
   function sendReminder(c: Client) {
     const phone = (c.phone ?? '').replace(/[^0-9]/g, '');
-    const montan = new Intl.NumberFormat('fr-HT').format(c.total_debt) + ' HTG';
+    const montan = formatMoney(c.total_debt, currency);
     const mesaj = `Bonjou ${c.name}! Sa se yon ti rapèl zanmitay: ou gen yon balans ki rete pou peye ki se ${montan}. Mèsi anpil pou konfyans ou. — ${businessName}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(mesaj)}`, '_blank');
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n) + ' HTG';
+  const fmt = (n: number) => formatMoney(n, currency);
 
   return (
     <div className="p-6 space-y-6">

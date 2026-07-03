@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { formatMoney } from '@/lib/currency';
 
 interface Product {
   id: string;
@@ -15,6 +16,7 @@ interface Product {
 
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [currency, setCurrency] = useState('HTG');
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [msg, setMsg] = useState('');
@@ -33,6 +35,13 @@ export default function InventoryPage() {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setLoading(false); return; }
+
+    const { data: biz } = await supabase
+      .from('businesses')
+      .select('currency')
+      .eq('id', session.user.id)
+      .single();
+    setCurrency(biz?.currency ?? 'HTG');
 
     const { data } = await supabase
       .from('products')
@@ -138,7 +147,7 @@ export default function InventoryPage() {
     load();
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n) + ' HTG';
+  const fmt = (n: number) => formatMoney(n, currency);
 
   const totalValue = products.reduce((s, p) => s + p.sale_price * p.quantity, 0);
   const lowStock = products.filter(p => p.quantity <= 5).length;
@@ -200,13 +209,13 @@ export default function InventoryPage() {
             value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-gray-500">Pri acha (HTG)</label>
+              <label className="text-xs text-gray-500">Pri acha</label>
               <input type="number" placeholder="0"
                 className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 value={form.purchase_price} onChange={e => setForm({ ...form, purchase_price: e.target.value })} />
             </div>
             <div>
-              <label className="text-xs text-gray-500">Pri vant (HTG)</label>
+              <label className="text-xs text-gray-500">Pri vant</label>
               <input type="number" placeholder="0"
                 className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 value={form.sale_price} onChange={e => setForm({ ...form, sale_price: e.target.value })} />
