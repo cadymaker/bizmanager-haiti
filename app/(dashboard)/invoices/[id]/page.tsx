@@ -61,7 +61,40 @@ export default function InvoiceDetailPage() {
 
     setLoading(false);
   }
+async function deleteInvoice() {
+    if (!invoice) return;
+    if (!confirm(`Efase fakti ${invoice.invoice_number}? Si li te gen pwodwi ki soti nan envantè, stock yo ap remonte. Aksyon sa a pa ka defèt.`)) return;
 
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    // Remonte stock pou chak pwodwi ki te nan fakti a
+    const items = invoice.metadata?.items ?? [];
+    for (const it of items as any[]) {
+      if (it.product_id) {
+        const { data: prod } = await supabase
+          .from('products')
+          .select('quantity')
+          .eq('id', it.product_id)
+          .single();
+        if (prod) {
+          await supabase
+            .from('products')
+            .update({ quantity: prod.quantity + (it.quantity ?? 0) })
+            .eq('id', it.product_id);
+        }
+      }
+    }
+
+    // Efase fakti a (peman yo ap efase otomatik ak cascade)
+    const { error } = await supabase.from('invoices').delete().eq('id', invoice.id);
+    if (!error) {
+      router.push('/invoices');
+    } else {
+      setMsg('Erè: ' + error.message);
+    }
+  }
   async function recordPayment() {
     const amount = parseFloat(payAmount);
     if (!amount || amount <= 0) { setMsg('Antre yon montan valab.'); return; }
@@ -116,10 +149,16 @@ export default function InvoiceDetailPage() {
       <div className="flex justify-between items-center">
         <button onClick={() => router.push('/invoices')}
           className="text-sm text-gray-500 hover:text-gray-800">← Retounen</button>
-        <button onClick={downloadPDF}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-          Telechaje PDF
-        </button>
+        <div className="flex gap-2">
+          <button onClick={downloadPDF}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            Telechaje PDF
+          </button>
+          <button onClick={deleteInvoice}
+            className="px-4 py-2 bg-red-100 text-red-700 rounded-lg text-sm hover:bg-red-200">
+            Efase fakti
+          </button>
+        </div>
       </div>
 
       {msg && <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>}

@@ -2,8 +2,14 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-interface Item { name: string; quantity: number; unit_price: number; }
+interface Item {
+  name: string;
+  quantity: number;
+  unit_price: number;
+  product_id?: string | null;
+}
 interface Client { id: string; name: string; }
+interface Product { id: string; name: string; sale_price: number; quantity: number; }
 interface Invoice {
   id: string;
   invoice_number: string;
@@ -18,12 +24,14 @@ interface Invoice {
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [msg, setMsg] = useState('');
+  const [saving, setSaving] = useState(false);
 
- const [clientId, setClientId] = useState('');
-  const [items, setItems] = useState<Item[]>([{ name: '', quantity: 1, unit_price: 0 }]);
+  const [clientId, setClientId] = useState('');
+  const [items, setItems] = useState<Item[]>([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
   const [discount, setDiscount] = useState(0);
 
   useEffect(() => { load(); }, []);
@@ -48,6 +56,13 @@ export default function InvoicesPage() {
       .order('name');
     setClients(cl ?? []);
 
+    const { data: pr } = await supabase
+      .from('products')
+      .select('id, name, sale_price, quantity')
+      .eq('business_id', session.user.id)
+      .order('name');
+    setProducts(pr ?? []);
+
     setLoading(false);
   }
 
@@ -57,15 +72,32 @@ export default function InvoicesPage() {
     setItems(copy);
   }
 
+  // Lè yon pwodwi chwazi nan lis la, ranpli non ak pri otomatik
+  function selectProduct(i: number, productId: string) {
+    const copy = [...items];
+    if (productId === '') {
+      copy[i].product_id = null;
+      setItems(copy);
+      return;
+    }
+    const prod = products.find(p => p.id === productId);
+    if (prod) {
+      copy[i].product_id = prod.id;
+      copy[i].name = prod.name;
+      copy[i].unit_price = prod.sale_price;
+    }
+    setItems(copy);
+  }
+
   function addItemRow() {
-    setItems([...items, { name: '', quantity: 1, unit_price: 0 }]);
+    setItems([...items, { name: '', quantity: 1, unit_price: 0, product_id: null }]);
   }
 
   function removeItem(i: number) {
     setItems(items.filter((_, idx) => idx !== i));
   }
 
- const subtotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
+  const subtotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
   const totalAfterDiscount = Math.max(0, subtotal - discount);
 
   async function saveInvoice(e: React.FormEvent) {
@@ -76,9 +108,21 @@ export default function InvoicesPage() {
       return;
     }
 
+    // VERIFYE STOCK: pou chak atik ki soti nan envantè, tcheke si gen ase
+    for (const it of validItems) {
+      if (it.product_id) {
+        const prod = products.find(p => p.id === it.product_id);
+        if (prod && it.quantity > prod.quantity) {
+          setMsg(`Stock pa ase pou "${prod.name}". Ou gen ${prod.quantity} an stock, ou eseye vann ${it.quantity}.`);
+          return;
+        }
+      }
+    }
+
+    setSaving(true);
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) { setSaving(false); return; }
 
     const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
     const finalTotal = Math.max(0, rawTotal - discount);
@@ -96,22 +140,44 @@ export default function InvoicesPage() {
       currency: 'HTG',
       status: 'sent',
       metadata: {
-        items: validItems.map(it => ({ ...it, total: it.quantity * it.unit_price })),
+        items: validItems.map(it => ({
+          name: it.name,
+          quantity: it.quantity,
+          unit_price: it.unit_price,
+          total: it.quantity * it.unit_price,
+          product_id: it.product_id ?? null,
+        })),
         discount: discount,
       },
     });
 
-    if (!error) {
-      setMsg('Fakti kreye ak siksè!');
-      setShowForm(false);
-      setClientId('');
-      setItems([{ name: '', quantity: 1, unit_price: 0 }]);
-      setDiscount(0);
-      load();
-      setTimeout(() => setMsg(''), 3000);
-    } else {
+    if (error) {
       setMsg('Erè: ' + error.message);
+      setSaving(false);
+      return;
     }
+
+    // DESANN STOCK: pou chak atik ki soti nan envantè
+    for (const it of validItems) {
+      if (it.product_id) {
+        const prod = products.find(p => p.id === it.product_id);
+        if (prod) {
+          await supabase
+            .from('products')
+            .update({ quantity: prod.quantity - it.quantity })
+            .eq('id', it.product_id);
+        }
+      }
+    }
+
+    setMsg('Fakti kreye ak siksè!');
+    setShowForm(false);
+    setClientId('');
+    setItems([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
+    setDiscount(0);
+    load();
+    setSaving(false);
+    setTimeout(() => setMsg(''), 3000);
   }
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n ?? 0) + ' HTG';
@@ -127,7 +193,7 @@ export default function InvoicesPage() {
       </div>
 
       {msg && (
-        <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>
+        <div className={`text-sm rounded-lg p-3 ${msg.startsWith('Erè') || msg.startsWith('Stock') || msg.startsWith('Ajoute') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{msg}</div>
       )}
 
       {showForm && (
@@ -143,23 +209,39 @@ export default function InvoicesPage() {
 
           <div>
             <label className="text-xs text-gray-500 font-medium">Atik yo</label>
-            <div className="space-y-2 mt-1">
+            <p className="text-xs text-gray-400 mb-2">Chwazi yon pwodwi nan envantè a, oswa tape yon atik lib.</p>
+            <div className="space-y-3 mt-1">
               {items.map((it, i) => (
-                <div key={i} className="flex gap-2 items-center">
-                  <input placeholder="Non atik" value={it.name}
-                    onChange={e => updateItem(i, 'name', e.target.value)}
-                    className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  <input type="number" placeholder="Qté" value={it.quantity}
-                    onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
-                    className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm" />
-                  <input type="number" placeholder="Pri" value={it.unit_price}
-                    onChange={e => updateItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
-                    className="w-24 px-2 py-2 border border-gray-200 rounded-lg text-sm" />
-                  <span className="w-24 text-sm text-gray-600 text-right">{fmt(it.quantity * it.unit_price)}</span>
-                  {items.length > 1 && (
-                    <button type="button" onClick={() => removeItem(i)}
-                      className="text-red-500 text-sm px-2">✕</button>
+                <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
+                  {products.length > 0 && (
+                    <select value={it.product_id ?? ''} onChange={e => selectProduct(i, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      <option value="">— Atik lib (tape anba) —</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id} disabled={p.quantity <= 0}>
+                          {p.name} ({p.quantity} an stock) {p.quantity <= 0 ? '- FINI' : ''}
+                        </option>
+                      ))}
+                    </select>
                   )}
+                  <div className="flex gap-2 items-center">
+                    <input placeholder="Non atik" value={it.name}
+                      onChange={e => updateItem(i, 'name', e.target.value)}
+                      readOnly={!!it.product_id}
+                      className={`flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
+                    <input type="number" placeholder="Qté" value={it.quantity} min="1"
+                      onChange={e => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
+                      className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
+                    <input type="number" placeholder="Pri" value={it.unit_price}
+                      onChange={e => updateItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
+                      readOnly={!!it.product_id}
+                      className={`w-24 px-2 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
+                    <span className="w-24 text-sm text-gray-600 text-right">{fmt(it.quantity * it.unit_price)}</span>
+                    {items.length > 1 && (
+                      <button type="button" onClick={() => removeItem(i)}
+                        className="text-red-500 text-sm px-2">✕</button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -184,9 +266,9 @@ export default function InvoicesPage() {
             </div>
           </div>
 
-          <button type="submit"
-            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-            Anrejistre fakti a
+          <button type="submit" disabled={saving}
+            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+            {saving ? 'Ap anrejistre...' : 'Anrejistre fakti a'}
           </button>
         </form>
       )}
@@ -212,9 +294,9 @@ export default function InvoicesPage() {
             )}
             {invoices.map(inv => (
               <tr key={inv.id} className="hover:bg-gray-50">
-<td className="px-4 py-3 font-mono text-blue-600 text-xs">
-  <a href={`/invoices/${inv.id}`} className="hover:underline">{inv.invoice_number}</a>
-</td>
+                <td className="px-4 py-3 font-mono text-blue-600 text-xs">
+                  <a href={`/invoices/${inv.id}`} className="hover:underline">{inv.invoice_number}</a>
+                </td>
                 <td className="px-4 py-3">{inv.client?.name ?? '—'}</td>
                 <td className="px-4 py-3 text-gray-500">{new Date(inv.issue_date).toLocaleDateString('fr-HT')}</td>
                 <td className="px-4 py-3">{fmt(inv.total_amount)}</td>
