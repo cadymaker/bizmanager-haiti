@@ -21,7 +21,7 @@ export default function AdminDashboard() {
   const [requests, setRequests] = useState<PaymentRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Business | null>(null);
- const [duration, setDuration] = useState<'30days' | '90days' | '1year'>('30days');
+  const [duration, setDuration] = useState<'30days' | '90days' | '1year'>('30days');
   const [code, setCode] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
@@ -36,9 +36,10 @@ export default function AdminDashboard() {
     if (!session) { setError('Ou pa konekte.'); setLoading(false); return; }
     const { data: me } = await supabase.from('businesses').select('is_admin').eq('id', session.user.id).single();
     if (!me?.is_admin) { setError('Aksè refize — ou pa yon admin.'); setLoading(false); return; }
+
     const { data } = await supabase
       .from('businesses')
-      .select('id, business_name, owner_name, email, phone, niche, license_status, trial_start_date, license_expiry_date, created_at')
+      .select('id, business_name, owner_name, email, phone, niche, is_admin, license_status, trial_start_date, license_expiry_date, created_at')
       .order('created_at', { ascending: false });
     setBusinesses((data as any) ?? []);
 
@@ -68,6 +69,7 @@ export default function AdminDashboard() {
     else { setMsg('Erè: ' + (data.error ?? 'pa ka trete')); }
     setProcessing(null);
   }
+
   async function revokeLicense(businessId: string, name: string) {
     if (!confirm(`Èske ou vle revoke lisans ${name}? App la ap bloke pou li jiskaske li peye ankò.`)) return;
     setProcessing(businessId);
@@ -100,7 +102,7 @@ export default function AdminDashboard() {
     if (res.ok) { setCode(data.code); } else { setCode('Erè: ' + (data.error ?? 'pa ka jenere')); }
   }
 
- function buildMessage() {
+  function buildMessage() {
     const dur = duration === '30days' ? '30 jou' : duration === '90days' ? '90 jou' : '1 an';
     return `Bonjou ${selected?.business_name}! Men kod aktivasyon lisans ou pou ${dur}: ${code}. Ale nan Parametr nan aplikasyon an, antre kod la, epi klike Aktive. Mesi pou konfyans ou! BizManager Haiti`;
   }
@@ -171,9 +173,9 @@ export default function AdminDashboard() {
                   <div className="font-medium text-gray-900">{r.business?.business_name ?? '—'}</div>
                   <div className="text-xs text-gray-400 break-all">{r.business?.email} · {r.business?.phone}</div>
                   <div className="mt-2 text-sm flex items-center gap-2 flex-wrap">
-                    <span className="font-medium">{r.duration}</span>
+                    <span className="font-medium text-gray-700">{r.duration}</span>
                     <span className="text-blue-600">{fmt(r.amount)}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs capitalize">{r.payment_method}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 text-xs capitalize text-gray-700">{r.payment_method}</span>
                   </div>
                   <div className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleString('fr-HT')}</div>
                 </div>
@@ -216,11 +218,11 @@ export default function AdminDashboard() {
             {businesses.map(b => (
               <tr key={b.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{b.business_name}</div>
+                  <div className="font-medium text-gray-900">{b.business_name}</div>
                   <div className="text-xs text-gray-400">{b.owner_name}</div>
                 </td>
                 <td className="px-4 py-3 text-gray-500">{b.email}</td>
-                <td className="px-4 py-3 capitalize">{b.niche}</td>
+                <td className="px-4 py-3 capitalize text-gray-700">{b.niche}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     b.license_status === 'active' ? 'bg-green-100 text-green-700' :
@@ -234,10 +236,10 @@ export default function AdminDashboard() {
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
                     <button onClick={() => { setSelected(b); setCode(null); }}
-                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700">
+                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 whitespace-nowrap">
                       Jenere kòd
                     </button>
-                    {b.license_status === 'active' && (
+                    {b.license_status === 'active' && !b.is_admin && (
                       <button onClick={() => revokeLicense(b.id, b.business_name)}
                         disabled={processing === b.id}
                         className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 disabled:opacity-50">
@@ -258,15 +260,15 @@ export default function AdminDashboard() {
             <h2 className="font-semibold text-gray-900">Kòd pou {selected.business_name}</h2>
             <div className="flex gap-2">
               <button onClick={() => { setDuration('30days'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '30days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '30days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                 30 jou
               </button>
               <button onClick={() => { setDuration('90days'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '90days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '90days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                 90 jou
               </button>
               <button onClick={() => { setDuration('1year'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '1year' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50'}`}>
+                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '1year' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
                 1 an
               </button>
             </div>
