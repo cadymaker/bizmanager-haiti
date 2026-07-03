@@ -7,17 +7,23 @@
   --foreground: #171717;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light only;
 }
 
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Asire tout tèks nan input yo toujou fonse ak lizib */
+input, textarea, select {
+  color: #171717;
+}
+
+input::placeholder, textarea::placeholder {
+  color: #9ca3af;
 }
 
 @layer utilities {

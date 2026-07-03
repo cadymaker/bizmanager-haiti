@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#2563eb',
+  themeColor: '#ffffff',
 };
 
 export default function RootLayout({
@@ -21,11 +21,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr">
+    <html lang="fr" style={{ colorScheme: 'light' }}>
       <head>
+        <meta name="color-scheme" content="light" />
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
-      <body>{children}</body>
+      <body style={{ backgroundColor: '#ffffff', color: '#171717' }}>{children}</body>
     </html>
   );
 }
