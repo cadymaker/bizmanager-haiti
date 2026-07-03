@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { formatMoney } from '@/lib/currency';
 
 interface Expense {
   id: string;
@@ -31,6 +32,7 @@ export default function ExpensesPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState('');
+const [currency, setCurrency] = useState('HTG');
 
   const [expForm, setExpForm] = useState({ category: 'loyer', description: '', amount: '' });
   const [invForm, setInvForm] = useState({ description: '', amount: '' });
@@ -42,6 +44,12 @@ export default function ExpensesPage() {
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) { setLoading(false); return; }
+    const { data: bizCur } = await supabase
+      .from('businesses')
+      .select('currency')
+      .eq('id', session.user.id)
+      .single();
+    setCurrency(bizCur?.currency ?? 'HTG');
 
     const { data: exp } = await supabase
       .from('expenses')
@@ -113,7 +121,7 @@ export default function ExpensesPage() {
     }
   }
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n) + ' HTG';
+ const fmt = (n: number) => formatMoney(n, currency);
   const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
   const totalInvestments = investments.reduce((s, i) => s + i.amount, 0);
 
