@@ -10,6 +10,7 @@ interface Product {
   purchase_price: number;
   sale_price: number;
   quantity: number;
+  image_url: string | null;
 }
 
 export default function InventoryPage() {
@@ -18,10 +19,11 @@ export default function InventoryPage() {
   const [showForm, setShowForm] = useState(false);
   const [msg, setMsg] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const [form, setForm] = useState({
     name: '', category: '', description: '',
-    purchase_price: '', sale_price: '', quantity: '',
+    purchase_price: '', sale_price: '', quantity: '', image_url: '',
   });
 
   useEffect(() => { load(); }, []);
@@ -42,7 +44,7 @@ export default function InventoryPage() {
   }
 
   function resetForm() {
-    setForm({ name: '', category: '', description: '', purchase_price: '', sale_price: '', quantity: '' });
+    setForm({ name: '', category: '', description: '', purchase_price: '', sale_price: '', quantity: '', image_url: '' });
     setEditId(null);
     setShowForm(false);
   }
@@ -55,9 +57,42 @@ export default function InventoryPage() {
       purchase_price: String(p.purchase_price),
       sale_price: String(p.sale_price),
       quantity: String(p.quantity),
+      image_url: p.image_url ?? '',
     });
     setEditId(p.id);
     setShowForm(true);
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setMsg('Imaj la twò gwo (maksimòm 2MB).');
+      return;
+    }
+
+    setUploading(true);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setUploading(false); return; }
+
+    const ext = file.name.split('.').pop();
+    const fileName = `${session.user.id}/${Date.now()}.${ext}`;
+
+    const { error: upErr } = await supabase.storage
+      .from('products')
+      .upload(fileName, file, { upsert: true });
+
+    if (upErr) {
+      setMsg('Erè upload: ' + upErr.message);
+      setUploading(false);
+      return;
+    }
+
+    const { data: urlData } = supabase.storage.from('products').getPublicUrl(fileName);
+    setForm(f => ({ ...f, image_url: urlData.publicUrl }));
+    setUploading(false);
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -76,6 +111,7 @@ export default function InventoryPage() {
       purchase_price: parseFloat(form.purchase_price) || 0,
       sale_price: parseFloat(form.sale_price) || 0,
       quantity: parseInt(form.quantity) || 0,
+      image_url: form.image_url || null,
     };
 
     let error;
@@ -133,6 +169,24 @@ export default function InventoryPage() {
       {showForm && (
         <form onSubmit={handleSave} className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
           <h2 className="font-medium text-gray-800">{editId ? 'Modifye pwodwi' : 'Ajoute nouvo pwodwi'}</h2>
+
+          <div className="flex items-center gap-4">
+            <div className="w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+              {form.image_url ? (
+                <img src={form.image_url} alt="Pwodwi" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-xs text-gray-400 text-center">Pa gen foto</span>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 font-medium">Foto pwodwi (opsyonèl)</label>
+              <input type="file" accept="image/*" onChange={handleImageUpload}
+                className="block mt-1 text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-xs hover:file:bg-blue-100" />
+              {uploading && <p className="text-xs text-blue-600 mt-1">Ap upload...</p>}
+              <p className="text-xs text-gray-400 mt-1">PNG, JPG — max 2MB</p>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <input placeholder="Non pwodwi *" required
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm"
@@ -164,8 +218,8 @@ export default function InventoryPage() {
                 value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
             </div>
           </div>
-          <button type="submit"
-            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
+          <button type="submit" disabled={uploading}
+            className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
             {editId ? 'Anrejistre chanjman' : 'Ajoute pwodwi a'}
           </button>
         </form>
@@ -193,8 +247,19 @@ export default function InventoryPage() {
             {products.map(p => (
               <tr key={p.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3">
-                  <div className="font-medium">{p.name}</div>
-                  {p.description && <div className="text-xs text-gray-400">{p.description}</div>}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-gray-300 text-xs">—</span>
+                      )}
+                    </div>
+                    <div>
+                      <div className="font-medium">{p.name}</div>
+                      {p.description && <div className="text-xs text-gray-400">{p.description}</div>}
+                    </div>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-gray-500">{p.category || '—'}</td>
                 <td className="px-4 py-3 text-gray-500">{fmt(p.purchase_price)}</td>
