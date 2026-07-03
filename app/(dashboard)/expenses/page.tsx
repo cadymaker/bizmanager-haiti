@@ -150,7 +150,7 @@ const [currency, setCurrency] = useState('HTG');
                 value={expForm.description}
                 onChange={e => setExpForm({ ...expForm, description: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-              <input type="number" placeholder="Montan (HTG)"
+              <input type="number" placeholder="Montan"
                 value={expForm.amount}
                 onChange={e => setExpForm({ ...expForm, amount: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
@@ -199,7 +199,7 @@ const [currency, setCurrency] = useState('HTG');
                 value={invForm.description}
                 onChange={e => setInvForm({ ...invForm, description: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-              <input type="number" placeholder="Montan (HTG)"
+              <input type="number" placeholder="Montan"
                 value={invForm.amount}
                 onChange={e => setInvForm({ ...invForm, amount: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
