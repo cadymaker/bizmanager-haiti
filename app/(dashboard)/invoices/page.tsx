@@ -31,6 +31,7 @@ export default function InvoicesPage() {
   const [msg, setMsg] = useState('');
   const [saving, setSaving] = useState(false);
   const [currency, setCurrency] = useState('HTG');
+  const [lastCreatedId, setLastCreatedId] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState('');
   const [items, setItems] = useState<Item[]>([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
@@ -134,7 +135,7 @@ export default function InvoicesPage() {
     const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
     const finalTotal = Math.max(0, rawTotal - discount);
 
-    const { error } = await supabase.from('invoices').insert({
+    const { data: inserted, error } = await supabase.from('invoices').insert({
       business_id: session.user.id,
       client_id: clientId || null,
       niche_template: 'retail',
@@ -156,7 +157,7 @@ export default function InvoicesPage() {
         })),
         discount: discount,
       },
-    });
+    }).select('id').single();
 
     if (error) {
       setMsg('Erè: ' + error.message);
@@ -176,6 +177,7 @@ export default function InvoicesPage() {
       }
     }
 
+    setLastCreatedId(inserted?.id ?? null);
     setMsg('Fakti kreye ak siksè!');
     setShowForm(false);
     setClientId('');
@@ -183,7 +185,6 @@ export default function InvoicesPage() {
     setDiscount(0);
     load();
     setSaving(false);
-    setTimeout(() => setMsg(''), 3000);
   }
 
   const fmt = (n: number) => formatMoney(n, currency);
@@ -193,14 +194,34 @@ export default function InvoicesPage() {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-semibold text-gray-900">Factures</h1>
-        <button onClick={() => setShowForm(!showForm)}
+        <button onClick={() => { setShowForm(!showForm); setLastCreatedId(null); }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
           {showForm ? 'Fèmen' : '+ Nouvo fakti'}
         </button>
       </div>
 
-      {msg && (
+      {msg && !lastCreatedId && (
         <div className={`text-sm rounded-lg p-3 ${msg.startsWith('Erè') || msg.startsWith('Stock') || msg.startsWith('Ajoute') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{msg}</div>
+      )}
+
+      {/* Mesaj apre anrejistreman ak bouton Voye (Pati A) */}
+      {lastCreatedId && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div>
+            <p className="font-medium text-green-800">✓ Fakti kreye ak siksè!</p>
+            <p className="text-sm text-green-600 mt-0.5">Ou ka voye l bay kliyan an kounye a.</p>
+          </div>
+          <div className="flex gap-2">
+            <a href={`/invoices/${lastCreatedId}`}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 whitespace-nowrap">
+              Voye bay kliyan →
+            </a>
+            <button onClick={() => setLastCreatedId(null)}
+              className="px-4 py-2 bg-white text-gray-600 border border-gray-200 rounded-lg text-sm hover:bg-gray-50">
+              Fèmen
+            </button>
+          </div>
+        </div>
       )}
 
       {showForm && (
@@ -281,7 +302,7 @@ export default function InvoicesPage() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
+        <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
               <th className="px-4 py-3">Numewo</th>
@@ -290,14 +311,15 @@ export default function InvoicesPage() {
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Solde</th>
               <th className="px-4 py-3">Estati</th>
+              <th className="px-4 py-3">Aksyon</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
             )}
             {!loading && invoices.length === 0 && (
-              <tr><td colSpan={6} className="px-4 py-6 text-center text-gray-400">Pa gen fakti toujou.</td></tr>
+              <tr><td colSpan={7} className="px-4 py-6 text-center text-gray-400">Pa gen fakti toujou.</td></tr>
             )}
             {invoices.map(inv => (
               <tr key={inv.id} className="hover:bg-gray-50">
@@ -325,6 +347,12 @@ export default function InvoicesPage() {
                     inv.status === 'draft' ? 'Bouyon' :
                     inv.status === 'cancelled' ? 'Anile' : inv.status
                   }</span>
+                </td>
+                <td className="px-4 py-3">
+                  <a href={`/invoices/${inv.id}`}
+                    className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs hover:bg-blue-200 whitespace-nowrap">
+                    Voye
+                  </a>
                 </td>
               </tr>
             ))}
