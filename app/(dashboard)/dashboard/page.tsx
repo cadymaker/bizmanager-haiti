@@ -83,40 +83,36 @@ export default function DashboardPage() {
         <p className="text-sm text-gray-500 mt-1">Byenveni, {ownerName}</p>
       </div>
 
-      {/* Premye ranje: Vant, Cash resevwa, Valè stock */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Tout 6 kat yo nan yon sèl grid: 2 pa ranje sou telefòn, 3 sou gwo ekran */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Total vant</p>
-          <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_sales ?? 0)}</p>
+          <p className="text-lg sm:text-xl font-semibold mt-1">{fmt(metrics?.total_sales ?? 0)}</p>
           <p className="text-xs text-gray-400 mt-1">Valè total tout fakti yo</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Cash resevwa</p>
-          <p className="text-xl font-semibold mt-1 text-green-600">{fmt(metrics?.total_cash_received ?? 0)}</p>
+          <p className="text-lg sm:text-xl font-semibold mt-1 text-green-600">{fmt(metrics?.total_cash_received ?? 0)}</p>
           <p className="text-xs text-gray-400 mt-1">Lajan ki peye reyèlman</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Valè stock (vant)</p>
-          <p className="text-xl font-semibold mt-1 text-blue-600">{fmt(metrics?.total_stock_value ?? 0)}</p>
+          <p className="text-lg sm:text-xl font-semibold mt-1 text-blue-600">{fmt(metrics?.total_stock_value ?? 0)}</p>
           <p className="text-xs text-gray-400 mt-1">Machandiz ki poko vann</p>
         </div>
-      </div>
-
-      {/* Dezyèm ranje: Investisman, Depans, Benefis */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Investisman</p>
-          <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_investments ?? 0)}</p>
+          <p className="text-lg sm:text-xl font-semibold mt-1">{fmt(metrics?.total_investments ?? 0)}</p>
           <p className="text-xs text-gray-400 mt-1">Acha machandiz/kapital</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Depans</p>
-          <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_expenses ?? 0)}</p>
+          <p className="text-lg sm:text-xl font-semibold mt-1">{fmt(metrics?.total_expenses ?? 0)}</p>
           <p className="text-xs text-gray-400 mt-1">Lwaye, salè, transpò...</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Benefis net</p>
-          <p className={`text-xl font-semibold mt-1 ${(metrics?.net_profit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+          <p className={`text-lg sm:text-xl font-semibold mt-1 ${(metrics?.net_profit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmt(metrics?.net_profit ?? 0)}
           </p>
           <p className="text-xs text-gray-400 mt-1">Vant + Stock − Depans − Invest.</p>
