@@ -24,6 +24,9 @@ interface BizInfo {
   owner_name: string;
   phone?: string;
   address?: string;
+  street?: string;
+  city?: string;
+  department?: string;
   logo_url?: string;
 }
 
@@ -55,7 +58,7 @@ export default function InvoiceDetailPage() {
 
     const { data: business } = await supabase
       .from('businesses')
-      .select('business_name, owner_name, phone, address, logo_url')
+      .select('business_name, owner_name, phone, address, street, city, department, logo_url')
       .eq('id', session.user.id)
       .single();
     setBiz(business);
@@ -174,9 +177,12 @@ async function deleteInvoice() {
             )}
             <div>
               <h1 className="text-xl font-bold text-gray-900">{biz?.business_name}</h1>
-            {biz?.address && <p className="text-sm text-gray-500">{biz.address}</p>}
-            {biz?.phone && <p className="text-sm text-gray-500">{biz.phone}</p>}
-            <p className="text-sm text-gray-500">Gonaïves, Ayiti</p>
+              {biz?.street && <p className="text-sm text-gray-500">{biz.street}</p>}
+              {biz?.phone && <p className="text-sm text-gray-500">{biz.phone}</p>}
+              <p className="text-sm text-gray-500">
+                {[biz?.city, biz?.department].filter(Boolean).join(', ')}
+                {(biz?.city || biz?.department) ? ', Ayiti' : 'Ayiti'}
+              </p>
             </div>
           </div>
           <div className="text-right">

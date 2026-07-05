@@ -9,8 +9,10 @@ export default function DashboardPage() {
   const [currency, setCurrency] = useState('HTG');
   const [metrics, setMetrics] = useState<{
     total_sales: number;
+    total_cash_received: number;
     total_investments: number;
     total_expenses: number;
+    total_stock_value: number;
     net_profit: number;
     total_receivables: number;
   } | null>(null);
@@ -81,26 +83,53 @@ export default function DashboardPage() {
         <p className="text-sm text-gray-500 mt-1">Byenveni, {ownerName}</p>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      {/* Premye ranje: Vant, Cash resevwa, Valè stock */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Total ventes</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Total vant</p>
           <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_sales ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Valè total tout fakti yo</p>
         </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Cash resevwa</p>
+          <p className="text-xl font-semibold mt-1 text-green-600">{fmt(metrics?.total_cash_received ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Lajan ki peye reyèlman</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Valè stock (vant)</p>
+          <p className="text-xl font-semibold mt-1 text-blue-600">{fmt(metrics?.total_stock_value ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Machandiz ki poko vann</p>
+        </div>
+      </div>
+
+      {/* Dezyèm ranje: Investisman, Depans, Benefis */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Investisman</p>
           <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_investments ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Acha machandiz/kapital</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Depans</p>
           <p className="text-xl font-semibold mt-1">{fmt(metrics?.total_expenses ?? 0)}</p>
+          <p className="text-xs text-gray-400 mt-1">Lwaye, salè, transpò...</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Benefis net</p>
           <p className={`text-xl font-semibold mt-1 ${(metrics?.net_profit ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             {fmt(metrics?.net_profit ?? 0)}
           </p>
+          <p className="text-xs text-gray-400 mt-1">Vant + Stock − Depans − Invest.</p>
         </div>
       </div>
+
+      {/* Bannè Dèt kliyan */}
+      {(metrics?.total_receivables ?? 0) > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-700 text-sm flex justify-between items-center">
+          <span>Dèt kliyan: <strong>{fmt(metrics?.total_receivables ?? 0)}</strong></span>
+          <a href="/clients" className="underline font-medium">Wè kliyan →</a>
+        </div>
+      )}
 
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <h2 className="font-medium text-gray-800 mb-4">Rezime finansye</h2>
@@ -108,8 +137,8 @@ export default function DashboardPage() {
           <ResponsiveContainer>
             <BarChart
               data={[
-                { name: 'Ventes', valè: metrics?.total_sales ?? 0 },
-                { name: 'Investisman', valè: metrics?.total_investments ?? 0 },
+                { name: 'Vant', valè: metrics?.total_sales ?? 0 },
+                { name: 'Cash resevwa', valè: metrics?.total_cash_received ?? 0 },
                 { name: 'Depans', valè: metrics?.total_expenses ?? 0 },
                 { name: 'Benefis', valè: metrics?.net_profit ?? 0 },
               ]}
@@ -121,7 +150,7 @@ export default function DashboardPage() {
               <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
               <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
                 {[
-                  '#16a34a', '#d97706', '#dc2626',
+                  '#16a34a', '#059669', '#dc2626',
                   (metrics?.net_profit ?? 0) >= 0 ? '#2563eb' : '#dc2626',
                 ].map((c, i) => (
                   <Cell key={i} fill={c} />
@@ -131,13 +160,6 @@ export default function DashboardPage() {
           </ResponsiveContainer>
         </div>
       </div>
-
-      {(metrics?.total_receivables ?? 0) > 0 && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-4 text-orange-700 text-sm flex justify-between">
-          <span>Dèt kliyan: <strong>{fmt(metrics?.total_receivables ?? 0)}</strong></span>
-          <a href="/clients" className="underline">Wè kliyan →</a>
-        </div>
-      )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
