@@ -150,7 +150,10 @@ export default function InventoryPage() {
   const fmt = (n: number) => formatMoney(n, currency);
 
   const totalValue = products.reduce((s, p) => s + p.sale_price * p.quantity, 0);
-  const lowStock = products.filter(p => p.quantity <= 5).length;
+  const lowStock = products.filter(p => p.quantity >= 1 && p.quantity <= 5).length;
+  const outOfStock = products.filter(p => p.quantity === 0).length;
+  const totalVarieties = products.length;
+  const totalItems = products.reduce((s, p) => s + p.quantity, 0);
 
   return (
     <div className="p-6 space-y-6">
@@ -164,14 +167,18 @@ export default function InventoryPage() {
 
       {msg && <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>}
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Valè total stock (vant)</p>
           <p className="text-xl font-semibold mt-1">{fmt(totalValue)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Pwodwi ki prèske fini (≤5)</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Pwodwi ki prèske fini (1-5)</p>
           <p className={`text-xl font-semibold mt-1 ${lowStock > 0 ? 'text-orange-600' : 'text-green-600'}`}>{lowStock}</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Pwodwi ki fini (0)</p>
+          <p className={`text-xl font-semibold mt-1 ${outOfStock > 0 ? 'text-red-600' : 'text-green-600'}`}>{outOfStock}</p>
         </div>
       </div>
 
@@ -275,9 +282,11 @@ export default function InventoryPage() {
                 <td className="px-4 py-3">{fmt(p.sale_price)}</td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    p.quantity <= 5 ? 'bg-orange-100 text-orange-700' : 'bg-green-100 text-green-700'
+                    p.quantity === 0 ? 'bg-red-100 text-red-700' :
+                    p.quantity <= 5 ? 'bg-orange-100 text-orange-700' :
+                    'bg-green-100 text-green-700'
                   }`}>
-                    {p.quantity} {p.quantity <= 5 ? '⚠️' : ''}
+                    {p.quantity} {p.quantity === 0 ? '❌' : p.quantity <= 5 ? '⚠️' : ''}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -296,6 +305,17 @@ export default function InventoryPage() {
             ))}
           </tbody>
         </table>
+
+        {!loading && products.length > 0 && (
+          <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between gap-2 text-sm">
+            <span className="text-gray-600">
+              Kantite varyete pwodwi: <strong className="text-gray-900">{totalVarieties}</strong>
+            </span>
+            <span className="text-gray-600">
+              Kantite total atik nan stock: <strong className="text-gray-900">{totalItems}</strong>
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
