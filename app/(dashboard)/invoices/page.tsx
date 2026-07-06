@@ -22,6 +22,23 @@ interface Invoice {
   client: { name?: string } | null;
 }
 
+// Dat san pwoblèm timezone pou AFICHE: pran sèlman pati dat la (YYYY-MM-DD)
+function formatInvoiceDate(dateStr: string): string {
+  const datePart = (dateStr || '').split('T')[0];
+  const [y, m, d] = datePart.split('-').map(Number);
+  if (!y || !m || !d) return dateStr || '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d)}/${pad(m)}/${y}`;
+}
+
+// Dat jodi a nan lè LOKAL la (Ayiti), pa an UTC.
+// Konsa yon fakti ou kreye aswè p ap pran dat demen.
+function todayLocalDate(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
@@ -139,7 +156,7 @@ export default function InvoicesPage() {
       business_id: session.user.id,
       client_id: clientId || null,
       niche_template: 'retail',
-      issue_date: new Date().toISOString().split('T')[0],
+      issue_date: todayLocalDate(),
       subtotal: rawTotal,
       tax_rate: 0,
       tax_amount: 0,
@@ -330,7 +347,7 @@ export default function InvoicesPage() {
                   <a href={`/invoices/${inv.id}`} className="hover:underline">{inv.invoice_number}</a>
                 </td>
                 <td className="px-4 py-3">{inv.client?.name ?? '—'}</td>
-                <td className="px-4 py-3 text-gray-500">{new Date(inv.issue_date).toLocaleDateString('fr-HT')}</td>
+                <td className="px-4 py-3 text-gray-500">{formatInvoiceDate(inv.issue_date)}</td>
                 <td className="px-4 py-3">{fmt(inv.total_amount)}</td>
                 <td className="px-4 py-3">
                   {inv.balance_due > 0
