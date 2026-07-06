@@ -211,7 +211,7 @@ const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Objec
         const prod = products.find(p => p.id === pid);
         const stock = prod?.quantity ?? 0;
         if (delta > stock) {
-          setMsg(`Stock pa ase pou "${prod?.name ?? 'pwodwi'}". Ou gen ${stock} an plis disponib, ou bezwen ${delta} an plis.`);
+          setMsg(`Stock pa ase pou "${prod?.name ?? 'pwodwi'}". Ou gen ${stock} disponib, ou bezwen ${delta} an plis.`);
           return;
         }
       }
