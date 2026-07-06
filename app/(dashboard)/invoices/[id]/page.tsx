@@ -156,9 +156,10 @@ export default function InvoiceDetailPage() {
     try {
       const { default: jsPDF } = await import('jspdf');
 
-      const pageW = 210;              // lajè A4 (mm) — sa toujou rete lajè a
+      const pageW = 210;              // lajè A4 (mm) — toujou rete lajè a
       const marginX = 15;
       const rightX = pageW - marginX;
+      const SECTION_GAP = 12;         // espas ~1.2cm ant gwo seksyon yo
 
       // jsPDF font estanda a pa ka desine separatè milye fransè a
       // (narrow/no-break space) → li montre "/". Nou ranplase l ak espas nòmal.
@@ -221,8 +222,10 @@ export default function InvoiceDetailPage() {
           pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); setColor([107, 114, 128]);
           if (invoice.client.phone) { pdf.text(invoice.client.phone, marginX, y); y += 4; }
           if (invoice.client.address) { pdf.text(invoice.client.address, marginX, y); y += 4; }
-          y += 2;
         }
+
+        // Espas ~1.2cm ant adrès kliyan an ak tablo atik la
+        y += SECTION_GAP;
 
         // ---------- TABLO ATIK ----------
         const tableW = pageW - marginX * 2;
@@ -253,7 +256,9 @@ export default function InvoiceDetailPage() {
           pdf.text(money(it.total), totalTX, y + 5, { align: 'right' });
           y += rowH;
         });
-        y += 6;
+
+        // Espas ~1.2cm ant tablo atik la ak sou-total la
+        y += SECTION_GAP;
 
         // ---------- TOTAL YO ----------
         const labelX = rightX - 50;
@@ -279,7 +284,7 @@ export default function InvoiceDetailPage() {
         ty += 3;
 
         // ---------- BA PAJ ----------
-        const footY = ty + 6;
+        const footY = ty + 8;
         pdf.setDrawColor(229, 231, 235); pdf.setLineWidth(0.3);
         pdf.line(marginX, footY - 4, rightX, footY - 4);
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); setColor([156, 163, 175]);
@@ -288,15 +293,13 @@ export default function InvoiceDetailPage() {
         return footY + 4; // kote kontni an fini
       };
 
-      // Pass 1: mezire kontni an sou yon paj tanporè (menm lajè 210mm)
+      // Pass 1: mezire kontni an (menm lajè 210mm)
       const scratch = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
       const contentBottom = draw(scratch);
-      const pageH = contentBottom + 6; // ti maj anba
+      const pageH = contentBottom + 6; // ti maj anba — paj la trime sou kontni an
 
       // Pass 2: vrè PDF la ak wotè egzak la.
-      // ENPÒTAN: nan 'portrait', si wotè < lajè, jsPDF vire paj la (mete pi piti
-      // valè kòm lajè) → sa koupe bò dwat la. Nou chwazi oryantasyon an selon
-      // dimansyon yo pou 210mm nan TOUJOU rete lajè a — kèlkeswa wotè fakti a.
+      // 210mm nan toujou rete lajè a (evite jsPDF vire paj la epi koupe bò dwat).
       const orientation = pageH >= pageW ? 'p' : 'l';
       const pdf = new jsPDF({ orientation, unit: 'mm', format: [pageW, pageH] });
       draw(pdf);
