@@ -2,9 +2,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import { formatMoney } from '@/lib/currency';
+import { formatMoney, currencySymbol } from '@/lib/currency';
 
-interface Item { name: string; quantity: number; unit_price: number; total: number; product_id?: string; }
+interface Item { name: string; quantity: number; unit_price: number; total: number; product_id?: string | null; }
 
 interface InvoiceFull {
   id: string;
@@ -17,6 +17,7 @@ interface InvoiceFull {
   currency: string;
   metadata: { items?: Item[]; discount?: number };
   client: { name?: string; phone?: string; address?: string } | null;
+  client_id?: string | null;
 }
 
 interface BizInfo {
@@ -29,6 +30,9 @@ interface BizInfo {
   department?: string;
   logo_url?: string;
 }
+
+interface Client { id: string; name: string; }
+interface Product { id: string; name: string; sale_price: number; quantity: number; }
 
 // Dat san pwoblèm timezone: nou pran sèlman pati dat la (YYYY-MM-DD)
 function formatInvoiceDate(dateStr: string): string {
@@ -52,6 +56,15 @@ export default function InvoiceDetailPage() {
   const [msg, setMsg] = useState('');
   const [generating, setGenerating] = useState(false);
 
+  // ---- Eta pou MODIFYE ----
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [eClientId, setEClientId] = useState('');
+  const [eItems, setEItems] = useState<Item[]>([]);
+  const [eDiscount, setEDiscount] = useState(0);
+
   useEffect(() => { load(); }, [id]);
 
   async function load() {
@@ -62,7 +75,7 @@ export default function InvoiceDetailPage() {
 
     const { data: inv } = await supabase
       .from('invoices')
-      .select('id, invoice_number, issue_date, total_amount, amount_paid, balance_due, status, currency, metadata, client:clients(name, phone, address)')
+      .select('id, invoice_number, issue_date, total_amount, amount_paid, balance_due, status, currency, metadata, client_id, client:clients(name, phone, address)')
       .eq('id', id)
       .single();
     setInvoice(inv as any);
@@ -73,6 +86,21 @@ export default function InvoiceDetailPage() {
       .eq('id', session.user.id)
       .single();
     setBiz(business);
+
+    // Kliyan ak pwodwi pou fòm modifikasyon an
+    const { data: cl } = await supabase
+      .from('clients')
+      .select('id, name')
+      .eq('business_id', session.user.id)
+      .order('name');
+    setClients(cl ?? []);
+
+    const { data: pr } = await supabase
+      .from('products')
+      .select('id, name, sale_price, quantity')
+      .eq('business_id', session.user.id)
+      .order('name');
+    setProducts(pr ?? []);
 
     // Konvèti logo a an base64 pou l parèt nan PDF (evite pwoblèm CORS)
     if (business?.logo_url) {
@@ -88,6 +116,163 @@ export default function InvoiceDetailPage() {
     }
 
     setLoading(false);
+  }
+
+  // Louvri fòm modifikasyon an ak done aktyèl fakti a
+  function startEdit() {
+    if (!invoice) return;
+    setEClientId(invoice.client_id ?? '');
+    const current = (invoice.metadata?.items ?? []).map(it => ({
+      name: it.name,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      total: it.quantity * it.unit_price,
+      product_id: it.product_id ?? null,
+    }));
+    setEItems(current.length ? current : [{ name: '', quantity: 1, unit_price: 0, total: 0, product_id: null }]);
+    setEDiscount(invoice.metadata?.discount ?? 0);
+    setMsg('');
+    setEditing(true);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setMsg('');
+  }
+
+  function eUpdateItem(i: number, field: keyof Item, value: string | number) {
+    const copy = [...eItems];
+    (copy[i] as any)[field] = value;
+    setEItems(copy);
+  }
+
+  function eSelectProduct(i: number, productId: string) {
+    const copy = [...eItems];
+    if (productId === '') {
+      copy[i].product_id = null;
+      setEItems(copy);
+      return;
+    }
+    const prod = products.find(p => p.id === productId);
+    if (prod) {
+      copy[i].product_id = prod.id;
+      copy[i].name = prod.name;
+      copy[i].unit_price = prod.sale_price;
+    }
+    setEItems(copy);
+  }
+
+  function eAddItemRow() {
+    setEItems([...eItems, { name: '', quantity: 1, unit_price: 0, total: 0, product_id: null }]);
+  }
+
+  function eRemoveItem(i: number) {
+    setEItems(eItems.filter((_, idx) => idx !== i));
+  }
+
+  const eSubtotal = eItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
+  const eTotalAfterDiscount = Math.max(0, eSubtotal - eDiscount);
+
+  // ---- ANREJISTRE MODIFIKASYON YO (ak ajisteman stock) ----
+  async function saveEdit() {
+    if (!invoice) return;
+    const validItems = eItems.filter(it => it.name.trim() && it.quantity > 0);
+    if (validItems.length === 0) { setMsg('Ajoute omwen yon atik.'); return; }
+
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+
+    // 1) Kalkile kantite ANSYEN pa pwodwi (sa ki te sove nan fakti a)
+    const oldByProduct: Record<string, number> = {};
+    for (const it of (invoice.metadata?.items ?? [])) {
+      if (it.product_id) {
+        oldByProduct[it.product_id] = (oldByProduct[it.product_id] ?? 0) + (it.quantity ?? 0);
+      }
+    }
+
+    // 2) Kalkile kantite NOUVO pa pwodwi (apre modifikasyon an)
+    const newByProduct: Record<string, number> = {};
+    for (const it of validItems) {
+      if (it.product_id) {
+        newByProduct[it.product_id] = (newByProduct[it.product_id] ?? 0) + it.quantity;
+      }
+    }
+
+    // 3) Pou chak pwodwi, delta = nouvo − ansyen.
+    //    delta > 0 → nou bezwen retire plis nan stock (fòk gen ase)
+    //    delta < 0 → nou remonte stock
+const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Object.keys(newByProduct)]));
+
+    // Verifye stock ase anvan nou touche anyen
+    for (const pid of allProductIds) {
+      const delta = (newByProduct[pid] ?? 0) - (oldByProduct[pid] ?? 0);
+      if (delta > 0) {
+        const prod = products.find(p => p.id === pid);
+        const stock = prod?.quantity ?? 0;
+        if (delta > stock) {
+          setMsg(`Stock pa ase pou "${prod?.name ?? 'pwodwi'}". Ou gen ${stock} an plis disponib, ou bezwen ${delta} an plis.`);
+          return;
+        }
+      }
+    }
+
+    setSaving(true);
+
+    const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
+    const finalTotal = Math.max(0, rawTotal - eDiscount);
+
+    // Nouvo estati dapre peman ki deja fèt
+    let newStatus = invoice.status;
+    if (invoice.amount_paid <= 0) newStatus = 'sent';
+    else if (invoice.amount_paid >= finalTotal) newStatus = 'paid';
+    else newStatus = 'partial';
+
+    // 4) Mete fakti a ajou (SAN balance_due — Postgres kalkile l otomatikman)
+    const { error } = await supabase
+      .from('invoices')
+      .update({
+        client_id: eClientId || null,
+        subtotal: rawTotal,
+        total_amount: finalTotal,
+        status: newStatus,
+        metadata: {
+          items: validItems.map(it => ({
+            name: it.name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            total: it.quantity * it.unit_price,
+            product_id: it.product_id ?? null,
+          })),
+          discount: eDiscount,
+        },
+      })
+      .eq('id', invoice.id);
+
+    if (error) {
+      setMsg('Erè: ' + error.message);
+      setSaving(false);
+      return;
+    }
+
+    // 5) Aplike ajisteman stock la (delta pa pwodwi)
+    for (const pid of allProductIds) {
+      const delta = (newByProduct[pid] ?? 0) - (oldByProduct[pid] ?? 0);
+      if (delta === 0) continue;
+      const prod = products.find(p => p.id === pid);
+      const currentStock = prod?.quantity ?? 0;
+      const nextStock = currentStock - delta; // retire delta (si negatif, li remonte)
+      await supabase
+        .from('products')
+        .update({ quantity: nextStock })
+        .eq('id', pid);
+    }
+
+    setMsg('Modifikasyon anrejistre!');
+    setEditing(false);
+    setSaving(false);
+    load();
+    setTimeout(() => setMsg(''), 3000);
   }
 
   async function deleteInvoice() {
@@ -161,20 +346,17 @@ export default function InvoiceDetailPage() {
       const rightX = pageW - marginX;
       const SECTION_GAP = 12;         // espas ~1.2cm ant gwo seksyon yo
 
-      // jsPDF font estanda a pa ka desine separatè milye fransè a
-      // (narrow/no-break space) → li montre "/". Nou ranplase l ak espas nòmal.
       const clean = (s: string) => (s || '').replace(/[\u202F\u00A0\u2009\u2007]/g, ' ');
       const money = (n: number) => clean(fmt(n));
 
       const items = invoice.metadata?.items ?? [];
       const discount = invoice.metadata?.discount ?? 0;
 
-      // Desine tout fakti a. Retounen Y kote kontni an fini.
       const draw = (pdf: any): number => {
         const setColor = (c: number[]) => pdf.setTextColor(c[0], c[1], c[2]);
         let y = 15;
 
-        // ---------- ANTÈT ----------
+        // ANTÈT
         let textX = marginX;
         const logoMax = 20;
         if (logoBase64) {
@@ -209,11 +391,10 @@ export default function InvoiceDetailPage() {
         const reservedTop = logoBase64 ? logoMax : 0;
         y = Math.max(by, y + reservedTop) + 3;
 
-        // Liy ble
         pdf.setDrawColor(37, 99, 235); pdf.setLineWidth(0.6);
         pdf.line(marginX, y, rightX, y); y += 6;
 
-        // ---------- KLIYAN ----------
+        // KLIYAN
         if (invoice.client && (invoice.client.name || invoice.client.phone || invoice.client.address)) {
           pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); setColor([156, 163, 175]);
           pdf.text('FAKTI POU', marginX, y); y += 4.5;
@@ -224,10 +405,9 @@ export default function InvoiceDetailPage() {
           if (invoice.client.address) { pdf.text(invoice.client.address, marginX, y); y += 4; }
         }
 
-        // Espas ~1.2cm ant adrès kliyan an ak tablo atik la
         y += SECTION_GAP;
 
-        // ---------- TABLO ATIK ----------
+        // TABLO ATIK
         const tableW = pageW - marginX * 2;
         const totalTX = rightX - 2;
         const priTX = totalTX - 30;
@@ -257,10 +437,9 @@ export default function InvoiceDetailPage() {
           y += rowH;
         });
 
-        // Espas ~1.2cm ant tablo atik la ak sou-total la
         y += SECTION_GAP;
 
-        // ---------- TOTAL YO ----------
+        // TOTAL YO
         const labelX = rightX - 50;
         let ty = y;
         const line = (label: string, value: string, o?: { color?: number[]; bold?: boolean; size?: number }) => {
@@ -283,23 +462,20 @@ export default function InvoiceDetailPage() {
         }
         ty += 3;
 
-        // ---------- BA PAJ ----------
+        // BA PAJ
         const footY = ty + 8;
         pdf.setDrawColor(229, 231, 235); pdf.setLineWidth(0.3);
         pdf.line(marginX, footY - 4, rightX, footY - 4);
         pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); setColor([156, 163, 175]);
         pdf.text('Mèsi pou konfyans ou! Peman: Cash, MonCash', pageW / 2, footY, { align: 'center' });
 
-        return footY + 4; // kote kontni an fini
+        return footY + 4;
       };
 
-      // Pass 1: mezire kontni an (menm lajè 210mm)
       const scratch = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
       const contentBottom = draw(scratch);
-      const pageH = contentBottom + 6; // ti maj anba — paj la trime sou kontni an
+      const pageH = contentBottom + 6;
 
-      // Pass 2: vrè PDF la ak wotè egzak la.
-      // 210mm nan toujou rete lajè a (evite jsPDF vire paj la epi koupe bò dwat).
       const orientation = pageH >= pageW ? 'p' : 'l';
       const pdf = new jsPDF({ orientation, unit: 'mm', format: [pageW, pageH] });
       draw(pdf);
@@ -312,6 +488,7 @@ export default function InvoiceDetailPage() {
   }
 
   const fmt = (n: number) => formatMoney(n, invoice?.currency);
+  const sym = currencySymbol(invoice?.currency);
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
   if (!invoice) return <div className="p-6 text-gray-400">Fakti pa jwenn.</div>;
@@ -319,12 +496,128 @@ export default function InvoiceDetailPage() {
   const items = invoice.metadata?.items ?? [];
   const logoSrc = logoBase64 || biz?.logo_url;
 
+  // ====== MÒD MODIFIKASYON ======
+  if (editing) {
+    return (
+      <div className="p-6 max-w-3xl mx-auto space-y-4">
+        <div className="flex justify-between items-center">
+          <h1 className="text-xl font-semibold text-gray-900">Modifye fakti {invoice.invoice_number}</h1>
+          <button onClick={cancelEdit} className="text-sm text-gray-500 hover:text-gray-800">← Anile</button>
+        </div>
+
+        {msg && (
+          <div className={`text-sm rounded-lg p-3 ${msg.startsWith('Erè') || msg.startsWith('Stock') || msg.startsWith('Ajoute') ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>{msg}</div>
+        )}
+
+        {invoice.amount_paid > 0 && (
+          <div className="bg-blue-50 text-blue-700 text-sm rounded-lg p-3">
+            Fakti sa a gen {fmt(invoice.amount_paid)} ki deja peye. Solde a ap rekalkile otomatikman.
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Kliyan</label>
+            <select value={eClientId} onChange={e => setEClientId(e.target.value)}
+              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm">
+              <option value="">— Chwazi kliyan —</option>
+              {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Atik yo</label>
+            <p className="text-xs text-gray-400 mb-2">Chwazi yon pwodwi nan envantè a, oswa tape yon atik lib. (Pri an {sym})</p>
+            <div className="space-y-3 mt-1">
+              {eItems.map((it, i) => (
+                <div key={i} className="border border-gray-100 rounded-lg p-3 space-y-2 bg-gray-50">
+                  {products.length > 0 && (
+                    <select value={it.product_id ?? ''} onChange={e => eSelectProduct(i, e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm bg-white">
+                      <option value="">— Atik lib (tape anba) —</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.quantity} an stock)
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <div className="flex gap-2 items-center">
+                    <input placeholder="Non atik" value={it.name}
+                      onChange={e => eUpdateItem(i, 'name', e.target.value)}
+                      readOnly={!!it.product_id}
+                      className={`flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
+                    <input type="number" placeholder="Qté" value={it.quantity === 0 ? '' : it.quantity} min="1"
+                      onChange={e => eUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
+                      className="w-16 px-2 py-2 border border-gray-200 rounded-lg text-sm bg-white" />
+                    <input type="number" placeholder="Pri" value={it.unit_price === 0 ? '' : it.unit_price}
+                      onChange={e => eUpdateItem(i, 'unit_price', parseFloat(e.target.value) || 0)}
+                      readOnly={!!it.product_id}
+                      className={`w-24 px-2 py-2 border border-gray-200 rounded-lg text-sm ${it.product_id ? 'bg-gray-100' : 'bg-white'}`} />
+                    <span className="w-24 text-sm text-gray-600 text-right">{fmt(it.quantity * it.unit_price)}</span>
+                    {eItems.length > 1 && (
+                      <button type="button" onClick={() => eRemoveItem(i)}
+                        className="text-red-500 text-sm px-2">✕</button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button type="button" onClick={eAddItemRow}
+              className="mt-2 text-sm text-blue-600 hover:underline">+ Ajoute atik</button>
+          </div>
+
+          <div className="border-t pt-3 space-y-2">
+            <div className="flex justify-end items-center gap-4">
+              <span className="text-sm text-gray-500">Sou-total:</span>
+              <span className="text-sm font-medium w-28 text-right">{fmt(eSubtotal)}</span>
+            </div>
+            <div className="flex justify-end items-center gap-4">
+              <span className="text-sm text-gray-500">Rabè ({sym}):</span>
+              <input type="number" value={eDiscount === 0 ? '' : eDiscount} placeholder="0"
+                onChange={e => setEDiscount(parseFloat(e.target.value) || 0)}
+                className="w-28 px-2 py-1 border border-gray-200 rounded-lg text-sm text-right" />
+            </div>
+            <div className="flex justify-end items-center gap-4">
+              <span className="text-sm text-gray-500">Total:</span>
+              <span className="text-lg font-semibold w-28 text-right">{fmt(eTotalAfterDiscount)}</span>
+            </div>
+            {invoice.amount_paid > 0 && (
+              <div className="flex justify-end items-center gap-4">
+                <span className="text-sm text-gray-500">Nouvo solde:</span>
+                <span className="text-sm font-medium w-28 text-right text-orange-600">
+                  {fmt(Math.max(0, eTotalAfterDiscount - invoice.amount_paid))}
+                </span>
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button onClick={saveEdit} disabled={saving}
+              className="flex-1 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              {saving ? 'Ap anrejistre...' : 'Anrejistre modifikasyon yo'}
+            </button>
+            <button onClick={cancelEdit} disabled={saving}
+              className="px-4 py-2.5 bg-gray-100 text-gray-600 rounded-lg text-sm hover:bg-gray-200">
+              Anile
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ====== MÒD NÒMAL (gade fakti a) ======
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-4">
       <div className="flex flex-wrap justify-between items-center gap-2">
         <button onClick={() => router.push('/invoices')}
           className="text-sm text-gray-500 hover:text-gray-800">← Retounen</button>
         <div className="flex gap-2">
+          <button onClick={startEdit}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+            Modifye
+          </button>
           <button onClick={downloadPDF} disabled={generating}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-60">
             {generating ? 'Ap prepare...' : 'Telechaje PDF'}
