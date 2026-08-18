@@ -24,7 +24,15 @@ export default function LoginPage() {
 
     // Tann 1 segonn pou sesyon an sove nan cookie anvan redireksyon
     await new Promise(resolve => setTimeout(resolve, 1000));
-    window.location.href = '/dashboard';
+
+    // Tcheke wòl la: kesye ale sou POS, mèt ale sou dashboard
+    const { getBusinessContext } = await import('@/lib/business');
+    const ctx = await getBusinessContext();
+    if (ctx?.role === 'cashier') {
+      window.location.href = '/pos';
+    } else {
+      window.location.href = '/dashboard';
+    }
   }
 
   return (

@@ -8,11 +8,12 @@ const nav = [
   { href: '/invoices', label: 'Factures' },
   { href: '/clients', label: 'Clients / Dèt' },
   { href: '/expenses', label: 'Depans' },
+  { href: '/team', label: 'Itilizatè' },
   { href: '/subscribe', label: 'Achte lisans' },
   { href: '/settings', label: 'Paramèt' },
 ];
 
-export default function Sidebar({ businessName, isAdmin, niche, onNavigate }: { businessName: string; isAdmin: boolean; niche?: string; onNavigate?: () => void }) {
+export default function Sidebar({ businessName, isAdmin, niche, role, onNavigate }: { businessName: string; isAdmin: boolean; niche?: string; role?: string; onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   const supabase = createClient();
@@ -23,6 +24,8 @@ export default function Sidebar({ businessName, isAdmin, niche, onNavigate }: { 
     router.refresh();
   }
 
+  const isCashier = role === 'cashier';
+
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col min-h-screen">
       <div className="p-4 border-b border-gray-700">
@@ -32,39 +35,54 @@ export default function Sidebar({ businessName, isAdmin, niche, onNavigate }: { 
       </div>
 
       <nav className="flex-1 p-3 space-y-1">
-        {nav.map(({ href, label }) => (
-          <Link key={href} href={href} onClick={onNavigate}
+        {isCashier ? (
+          // ===== MENI KESYE (sèlman POS) =====
+          <Link href="/pos" onClick={onNavigate}
             className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-              pathname.startsWith(href)
+              pathname.startsWith('/pos')
                 ? 'bg-blue-600 text-white'
                 : 'text-gray-300 hover:bg-gray-800 hover:text-white'
             }`}>
-            {label}
+            Vant (POS)
           </Link>
-        ))}
-
-        {niche === 'retail' && (
-          <Link href="/inventory" onClick={onNavigate}
-            className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-              pathname.startsWith('/inventory')
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-            }`}>
-            Envantè
-          </Link>
-        )}
-
-        {isAdmin && (
+        ) : (
+          // ===== MENI MÈT (tout bagay) =====
           <>
-            <div className="border-t border-gray-700 my-2" />
-            <Link href="/admin" onClick={onNavigate}
-              className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
-                pathname.startsWith('/admin')
-                  ? 'bg-amber-600 text-white'
-                  : 'text-amber-400 hover:bg-gray-800'
-              }`}>
-              Admin Dashboard
-            </Link>
+            {nav.map(({ href, label }) => (
+              <Link key={href} href={href} onClick={onNavigate}
+                className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                  pathname.startsWith(href)
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}>
+                {label}
+              </Link>
+            ))}
+
+            {niche === 'retail' && (
+              <Link href="/inventory" onClick={onNavigate}
+                className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                  pathname.startsWith('/inventory')
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                }`}>
+                Envantè
+              </Link>
+            )}
+
+            {isAdmin && (
+              <>
+                <div className="border-t border-gray-700 my-2" />
+                <Link href="/admin" onClick={onNavigate}
+                  className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
+                    pathname.startsWith('/admin')
+                      ? 'bg-amber-600 text-white'
+                      : 'text-amber-400 hover:bg-gray-800'
+                  }`}>
+                  Admin Dashboard
+                </Link>
+              </>
+            )}
           </>
         )}
       </nav>

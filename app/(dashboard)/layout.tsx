@@ -9,6 +9,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [businessName, setBusinessName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [niche, setNiche] = useState('');
+  const [role, setRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -31,11 +32,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       }
 
       // Jwenn vrè business_id ak wòl itilizatè a (mèt oswa kesye).
-      // Pou yon mèt, businessId = user.id. Pou yon kesye, se id mèt la.
       const ctx = await getBusinessContext();
       if (!ctx) {
-        // Itilizatè konekte men pa gen manm (ka ra) — voye l sou login
         window.location.href = '/login';
+        return;
+      }
+
+      const path = window.location.pathname;
+
+      // Kesye gen aksè SÈLMAN nan POS la. Si li eseye ale yon lòt kote, voye l sou POS.
+      if (ctx.role === 'cashier' && !path.startsWith('/pos')) {
+        window.location.href = '/pos';
         return;
       }
 
@@ -60,8 +67,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       }
 
-      const path = window.location.pathname;
-
       // Si biznis pa gen devise chwazi, voye l chwazi youn (sof si li deja sou paj la)
       if (business && !business.currency && !path.startsWith('/choose-currency')) {
         window.location.href = '/choose-currency';
@@ -79,6 +84,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       setBusinessName(business?.business_name ?? '');
       setIsAdmin(business?.is_admin ?? false);
       setNiche(business?.niche ?? '');
+      setRole(ctx.role);
       setLoading(false);
     }
 
@@ -103,7 +109,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         md:relative md:translate-x-0
         ${menuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-        <Sidebar businessName={businessName} isAdmin={isAdmin} niche={niche} onNavigate={() => setMenuOpen(false)} />
+        <Sidebar businessName={businessName} isAdmin={isAdmin} niche={niche} role={role} onNavigate={() => setMenuOpen(false)} />
       </div>
 
       {menuOpen && (
