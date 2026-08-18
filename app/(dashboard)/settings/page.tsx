@@ -250,6 +250,22 @@ export default function SettingsPage() {
           Tarif: 30 jou — 1 000 HTG | 90 jou — 2 500 HTG | 1 an — 10 000 HTG. Peman: MonCash oswa Cash.
         </p>
       </div>
+
+      {/* LEGAL */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-medium text-gray-800">Legal</h2>
+        <p className="text-sm text-gray-500 mt-0.5">Enfòmasyon sou vi prive w ak kondisyon itilizasyon app la.</p>
+        <div className="flex flex-col sm:flex-row gap-2 mt-3">
+          <a href="/legal/privacy" target="_blank" rel="noopener noreferrer"
+            className="flex-1 text-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+            Politik Konfidansyalite
+          </a>
+          <a href="/legal/terms" target="_blank" rel="noopener noreferrer"
+            className="flex-1 text-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+            Kondisyon Itilizasyon
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
