@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatMoney } from '@/lib/currency';
 
@@ -29,13 +30,13 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       const supabase = createClient();
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
+      const ctx = await getBusinessContext();
+      if (!ctx) return;
 
       const { data: business } = await supabase
         .from('businesses')
         .select('owner_name, currency, trial_start_date, license_status')
-        .eq('id', session.user.id)
+        .eq('id', ctx.businessId)
         .single();
 
       if (business) {
@@ -52,14 +53,14 @@ export default function DashboardPage() {
       const { data: m } = await supabase
         .from('dashboard_metrics')
         .select('*')
-        .eq('business_id', session.user.id)
+        .eq('business_id', ctx.businessId)
         .single();
       setMetrics(m);
 
       const { data: inv } = await supabase
         .from('invoices')
         .select('id, invoice_number, total_amount, balance_due, status, client:clients(name)')
-        .eq('business_id', session.user.id)
+        .eq('business_id', ctx.businessId)
         .order('created_at', { ascending: false })
         .limit(5);
       setInvoices((inv as any) ?? []);

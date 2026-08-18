@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { getLicenseInfo } from '@/lib/license';
 
 export default function SettingsPage() {
@@ -26,13 +27,13 @@ export default function SettingsPage() {
   async function load() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data } = await supabase
       .from('businesses')
       .select('*')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setBusiness(data);
     setStreet(data?.street ?? '');
@@ -48,11 +49,11 @@ export default function SettingsPage() {
 
     setLogoUploading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLogoUploading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLogoUploading(false); return; }
 
     const ext = file.name.split('.').pop();
-    const fileName = `${session.user.id}/logo.${ext}`;
+    const fileName = `${ctx.businessId}/logo.${ext}`;
 
     const { error: upErr } = await supabase.storage
       .from('logos')
@@ -63,7 +64,7 @@ export default function SettingsPage() {
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName);
     const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
 
-    await supabase.from('businesses').update({ logo_url: logoUrl }).eq('id', session.user.id);
+    await supabase.from('businesses').update({ logo_url: logoUrl }).eq('id', ctx.businessId);
     setMsg('Logo modifye!');
     load();
     setLogoUploading(false);
@@ -74,8 +75,8 @@ export default function SettingsPage() {
     e.preventDefault();
     setSavingAddr(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setSavingAddr(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setSavingAddr(false); return; }
 
     const { error } = await supabase
       .from('businesses')
@@ -84,7 +85,7 @@ export default function SettingsPage() {
         city: city || null,
         department: department || null,
       })
-      .eq('id', session.user.id);
+      .eq('id', ctx.businessId);
 
     if (!error) {
       setMsg('Adrès anrejistre!');

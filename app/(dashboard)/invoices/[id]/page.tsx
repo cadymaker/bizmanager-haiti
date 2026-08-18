@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { formatMoney, currencySymbol } from '@/lib/currency';
 
 interface Item { name: string; quantity: number; unit_price: number; total: number; product_id?: string | null; }
@@ -70,8 +71,8 @@ export default function InvoiceDetailPage() {
   async function load() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data: inv } = await supabase
       .from('invoices')
@@ -83,7 +84,7 @@ export default function InvoiceDetailPage() {
     const { data: business } = await supabase
       .from('businesses')
       .select('business_name, owner_name, phone, address, street, city, department, logo_url')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setBiz(business);
 
@@ -91,14 +92,14 @@ export default function InvoiceDetailPage() {
     const { data: cl } = await supabase
       .from('clients')
       .select('id, name')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setClients(cl ?? []);
 
     const { data: pr } = await supabase
       .from('products')
       .select('id, name, sale_price, quantity')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(pr ?? []);
 
@@ -180,8 +181,8 @@ export default function InvoiceDetailPage() {
     if (validItems.length === 0) { setMsg('Ajoute omwen yon atik.'); return; }
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     // 1) Kalkile kantite ANSYEN pa pwodwi (sa ki te sove nan fakti a)
     const oldByProduct: Record<string, number> = {};
@@ -202,7 +203,7 @@ export default function InvoiceDetailPage() {
     // 3) Pou chak pwodwi, delta = nouvo − ansyen.
     //    delta > 0 → nou bezwen retire plis nan stock (fòk gen ase)
     //    delta < 0 → nou remonte stock
-const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Object.keys(newByProduct)]));
+    const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Object.keys(newByProduct)]));
 
     // Verifye stock ase anvan nou touche anyen
     for (const pid of allProductIds) {
@@ -280,8 +281,8 @@ const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Objec
     if (!confirm(`Efase fakti ${invoice.invoice_number}? Si li te gen pwodwi ki soti nan envantè, stock yo ap remonte. Aksyon sa a pa ka defèt.`)) return;
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const items = invoice.metadata?.items ?? [];
     for (const it of items as any[]) {
@@ -314,12 +315,12 @@ const allProductIds = Array.from(new Set([...Object.keys(oldByProduct), ...Objec
     if (!invoice) return;
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const { error } = await supabase.from('payments').insert({
       invoice_id: invoice.id,
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       amount,
       method: 'cash',
     });

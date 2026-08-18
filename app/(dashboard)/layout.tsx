@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import Sidebar from '@/components/layout/Sidebar';
 import InstallPrompt from '@/components/InstallPrompt';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
- const [businessName, setBusinessName] = useState('');
+  const [businessName, setBusinessName] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
   const [niche, setNiche] = useState('');
   const [loading, setLoading] = useState(true);
@@ -29,10 +30,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return;
       }
 
-     const { data: business } = await supabase
+      // Jwenn vrè business_id ak wòl itilizatè a (mèt oswa kesye).
+      // Pou yon mèt, businessId = user.id. Pou yon kesye, se id mèt la.
+      const ctx = await getBusinessContext();
+      if (!ctx) {
+        // Itilizatè konekte men pa gen manm (ka ra) — voye l sou login
+        window.location.href = '/login';
+        return;
+      }
+
+      const { data: business } = await supabase
         .from('businesses')
         .select('business_name, is_admin, niche, currency, license_status, license_expiry_date, trial_start_date')
-        .eq('id', session.user.id)
+        .eq('id', ctx.businessId)
         .single();
 
       // Verifye si lisans lan aksesib
@@ -49,7 +59,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           accessible = false;
         }
       }
-const path = window.location.pathname;
+
+      const path = window.location.pathname;
 
       // Si biznis pa gen devise chwazi, voye l chwazi youn (sof si li deja sou paj la)
       if (business && !business.currency && !path.startsWith('/choose-currency')) {
@@ -92,7 +103,7 @@ const path = window.location.pathname;
         md:relative md:translate-x-0
         ${menuOpen ? 'translate-x-0' : '-translate-x-full'}
       `}>
-       <Sidebar businessName={businessName} isAdmin={isAdmin} niche={niche} onNavigate={() => setMenuOpen(false)} />
+        <Sidebar businessName={businessName} isAdmin={isAdmin} niche={niche} onNavigate={() => setMenuOpen(false)} />
       </div>
 
       {menuOpen && (
