@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
 
 const CATEGORIES = [
@@ -42,27 +43,27 @@ export default function ExpensesPage() {
   async function load() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data: bizCur } = await supabase
       .from('businesses')
       .select('currency')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setCurrency(bizCur?.currency ?? 'HTG');
 
     const { data: exp } = await supabase
       .from('expenses')
       .select('*')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('created_at', { ascending: false });
     setExpenses((exp as any) ?? []);
 
     const { data: inv } = await supabase
       .from('investments')
       .select('*')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('created_at', { ascending: false });
     setInvestments((inv as any) ?? []);
 
@@ -75,11 +76,11 @@ export default function ExpensesPage() {
     if (!amt || amt <= 0) { setMsg('Antre yon montan valid.'); return; }
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const payload = {
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       category: expForm.category,
       description: expForm.description || null,
       amount: amt,
@@ -109,11 +110,11 @@ export default function ExpensesPage() {
     if (!amt || amt <= 0) { setMsg('Antre yon montan valid.'); return; }
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const payload = {
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       description: invForm.description || null,
       amount: amt,
     };

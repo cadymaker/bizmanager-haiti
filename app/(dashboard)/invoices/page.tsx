@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { formatMoney, currencySymbol } from '@/lib/currency';
 
 interface Item {
@@ -59,34 +60,34 @@ export default function InvoicesPage() {
   async function load() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data: biz } = await supabase
       .from('businesses')
       .select('currency')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setCurrency(biz?.currency ?? 'HTG');
 
     const { data: inv } = await supabase
       .from('invoices')
       .select('id, invoice_number, total_amount, amount_paid, balance_due, status, issue_date, client:clients(name)')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('created_at', { ascending: false });
     setInvoices((inv as any) ?? []);
 
     const { data: cl } = await supabase
       .from('clients')
       .select('id, name')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setClients(cl ?? []);
 
     const { data: pr } = await supabase
       .from('products')
       .select('id, name, sale_price, quantity')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(pr ?? []);
 
@@ -146,14 +147,14 @@ export default function InvoicesPage() {
 
     setSaving(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setSaving(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setSaving(false); return; }
 
     const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
     const finalTotal = Math.max(0, rawTotal - discount);
 
     const { data: inserted, error } = await supabase.from('invoices').insert({
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       client_id: clientId || null,
       niche_template: 'retail',
       issue_date: todayLocalDate(),

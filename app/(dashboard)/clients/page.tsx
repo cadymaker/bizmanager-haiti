@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { Client } from '@/types';
 import { formatMoney } from '@/lib/currency';
 
@@ -17,13 +18,13 @@ export default function ClientsPage() {
   async function loadClients() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data: biz } = await supabase
       .from('businesses')
       .select('business_name, currency')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setBusinessName(biz?.business_name ?? '');
     setCurrency(biz?.currency ?? 'HTG');
@@ -31,7 +32,7 @@ export default function ClientsPage() {
     const { data } = await supabase
       .from('clients')
       .select('*')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setClients(data ?? []);
     setLoading(false);
@@ -42,11 +43,11 @@ export default function ClientsPage() {
     if (!form.name.trim()) return;
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const { error } = await supabase.from('clients').insert({
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       name: form.name,
       phone: form.phone || null,
       address: form.address || null,

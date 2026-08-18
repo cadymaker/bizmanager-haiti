@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
 
 interface Product {
@@ -33,20 +34,20 @@ export default function InventoryPage() {
   async function load() {
     setLoading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setLoading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setLoading(false); return; }
 
     const { data: biz } = await supabase
       .from('businesses')
       .select('currency')
-      .eq('id', session.user.id)
+      .eq('id', ctx.businessId)
       .single();
     setCurrency(biz?.currency ?? 'HTG');
 
     const { data } = await supabase
       .from('products')
       .select('*')
-      .eq('business_id', session.user.id)
+      .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(data ?? []);
     setLoading(false);
@@ -83,11 +84,11 @@ export default function InventoryPage() {
 
     setUploading(true);
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) { setUploading(false); return; }
+    const ctx = await getBusinessContext();
+    if (!ctx) { setUploading(false); return; }
 
     const ext = file.name.split('.').pop();
-    const fileName = `${session.user.id}/${Date.now()}.${ext}`;
+    const fileName = `${ctx.businessId}/${Date.now()}.${ext}`;
 
     const { error: upErr } = await supabase.storage
       .from('products')
@@ -109,11 +110,11 @@ export default function InventoryPage() {
     if (!form.name.trim()) { setMsg('Non pwodwi obligatwa.'); return; }
 
     const supabase = createClient();
-    const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    const ctx = await getBusinessContext();
+    if (!ctx) return;
 
     const payload = {
-      business_id: session.user.id,
+      business_id: ctx.businessId,
       name: form.name,
       category: form.category || null,
       description: form.description || null,
