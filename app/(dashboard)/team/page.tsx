@@ -15,8 +15,10 @@ export default function TeamPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [isOwner, setIsOwner] = useState(false);
+  const [myUserId, setMyUserId] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [removingId, setRemovingId] = useState<string | null>(null);
   const [msg, setMsg] = useState('');
   const [msgType, setMsgType] = useState<'ok' | 'err'>('ok');
 
@@ -31,6 +33,7 @@ export default function TeamPage() {
     if (!ctx) { setLoading(false); return; }
 
     setIsOwner(ctx.role === 'owner');
+    setMyUserId(ctx.userId);
 
     // Sèlman mèt ka wè lis la — chèche atravè API sèvè a (ak service key)
     if (ctx.role === 'owner') {
@@ -85,6 +88,36 @@ export default function TeamPage() {
       setMsg(data.error ?? 'Erè pandan kreyasyon an.'); setMsgType('err');
     }
     setSaving(false);
+  }
+
+  async function removeCashier(m: Member) {
+    if (!confirm(`Retire ${m.full_name || 'itilizatè sa a'}? Li p ap ka konekte ankò. Aksyon sa a pa ka defèt.`)) return;
+
+    setRemovingId(m.user_id);
+    setMsg('');
+
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setRemovingId(null); return; }
+
+    const res = await fetch('/api/team', {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ user_id: m.user_id }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      setMsg('Itilizatè retire ak siksè.'); setMsgType('ok');
+      load();
+      setTimeout(() => setMsg(''), 4000);
+    } else {
+      setMsg(data.error ?? 'Erè pandan retire a.'); setMsgType('err');
+    }
+    setRemovingId(null);
   }
 
   const roleLabel = (r: string) => r === 'owner' ? 'Mèt' : 'Kesye';
@@ -160,11 +193,20 @@ export default function TeamPage() {
               <div className="min-w-0">
                 <div className="font-medium text-sm text-gray-800">{m.full_name || 'San non'}</div>
               </div>
-              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                m.role === 'owner' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {roleLabel(m.role)}
-              </span>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                  m.role === 'owner' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'
+                }`}>
+                  {roleLabel(m.role)}
+                </span>
+                {/* Bouton Retire — sèlman pou kesye (pa pou mèt la limenm) */}
+                {m.role === 'cashier' && m.user_id !== myUserId && (
+                  <button onClick={() => removeCashier(m)} disabled={removingId === m.user_id}
+                    className="text-xs text-red-600 hover:underline disabled:opacity-50">
+                    {removingId === m.user_id ? 'Ap retire...' : 'Retire'}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

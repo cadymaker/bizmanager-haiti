@@ -115,3 +115,77 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({ success: true, message: 'Kesye ajoute ak siksè!' });
 }
+
+// ---- RETIRE YON KESYE (sèlman mèt) ----
+export async function DELETE(req: NextRequest) {
+  const authHeader = req.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '');
+  if (!token) {
+    return NextResponse.json({ error: 'Ou pa otorize.' }, { status: 401 });
+  }
+
+  const { user_id } = await req.json();
+  if (!user_id) {
+    return NextResponse.json({ error: 'Itilizatè a pa espesifye.' }, { status: 400 });
+  }
+
+  const admin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+
+  // 1) Verifye ki moun k ap fè demann nan
+  const { data: userData, error: userError } = await admin.auth.getUser(token);
+  if (userError || !userData.user) {
+    return NextResponse.json({ error: 'Sesyon envalid.' }, { status: 401 });
+  }
+  const requesterId = userData.user.id;
+
+  // 2) Verifye ke moun sa a se yon OWNER
+  const { data: membership } = await admin
+    .from('business_users')
+    .select('business_id, role')
+    .eq('user_id', requesterId)
+    .single();
+
+  if (!membership || membership.role !== 'owner') {
+    return NextResponse.json({ error: 'Sèlman mèt biznis la ka retire yon itilizatè.' }, { status: 403 });
+  }
+
+  // 3) Yon mèt PA ka retire tèt li
+  if (user_id === requesterId) {
+    return NextResponse.json({ error: 'Ou pa ka retire tèt ou.' }, { status: 400 });
+  }
+
+  // 4) Verifye ke moun n ap retire a fè pati MENM biznis la (sekirite)
+  const { data: target } = await admin
+    .from('business_users')
+    .select('id, business_id, role')
+    .eq('user_id', user_id)
+    .single();
+
+  if (!target || target.business_id !== membership.business_id) {
+    return NextResponse.json({ error: 'Itilizatè sa a pa fè pati biznis ou.' }, { status: 403 });
+  }
+
+  // 5) Retire liy business_users la
+  const { error: delBuError } = await admin
+    .from('business_users')
+    .delete()
+    .eq('user_id', user_id)
+    .eq('business_id', membership.business_id);
+
+  if (delBuError) {
+    return NextResponse.json({ error: 'Erè pandan retire aksè a: ' + delBuError.message }, { status: 500 });
+  }
+
+  // 6) Efase kont Auth la (konsa li pa ka konekte ankò)
+  const { error: delAuthError } = await admin.auth.admin.deleteUser(user_id);
+  if (delAuthError) {
+    // Aksè a retire deja (etap 5), men kont Auth la pa efase. Nou siyale l.
+    return NextResponse.json({ error: 'Aksè retire, men gen pwoblèm efase kont lan: ' + delAuthError.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ success: true, message: 'Itilizatè retire ak siksè.' });
+}
