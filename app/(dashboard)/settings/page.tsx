@@ -252,6 +252,18 @@ export default function SettingsPage() {
         </p>
       </div>
 
+      {/* ENPRIMANT */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-medium text-gray-800">Enprimant tèmik</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Konekte yon enprimant Bluetooth 80mm pou enprime resi vant ak Rapò Z fèmti kès sou telefòn oswa tablèt Android.
+        </p>
+        <a href="/settings/printer"
+          className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100">
+          🖨️ Wè gid konfigirasyon an
+        </a>
+      </div>
+
       {/* LEGAL */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="font-medium text-gray-800">Legal</h2>

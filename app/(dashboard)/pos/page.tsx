@@ -39,6 +39,27 @@ interface Receipt {
   change: number;
 }
 
+interface Session {
+  id: string;
+  opening_amount: number;
+  cash_out: number;
+  currency: string;
+  opened_at: string;
+}
+
+// Rezime fèmti kès (Rapò Z)
+interface ZReport {
+  openingAmount: number;
+  totalCashSales: number;
+  cashOut: number;
+  expected: number;
+  counted: number;
+  ecart: number;
+  openedAt: string;
+  closedAt: string;
+  cashierName: string;
+}
+
 // Dat jodi a nan lè LOKAL la (Ayiti), pa an UTC
 function todayLocalDate(): string {
   const d = new Date();
@@ -53,6 +74,13 @@ function nowDateTime(): string {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Fòma yon timestamp ISO an dat+lè lokal
+function fmtDateTime(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [biz, setBiz] = useState<BizInfo | null>(null);
@@ -60,6 +88,19 @@ export default function PosPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
+
+  // ===== Kès =====
+  const [session, setSession] = useState<Session | null>(null);
+  const [sessionCashSales, setSessionCashSales] = useState(0); // total kach kès la (kalkile an dirèk)
+  const [showOpenModal, setShowOpenModal] = useState(false);
+  const [openingInput, setOpeningInput] = useState('');
+  const [openingBusy, setOpeningBusy] = useState(false);
+
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [countedInput, setCountedInput] = useState('');
+  const [cashOutInput, setCashOutInput] = useState('');
+  const [closingBusy, setClosingBusy] = useState(false);
+  const [zReport, setZReport] = useState<ZReport | null>(null);
 
   // Eskane barcode (tape / eskanè USB)
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -104,7 +145,73 @@ export default function PosPage() {
       .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(data ?? []);
+
+    // Chaje kès ki louvri a (si genyen)
+    await loadSession(ctx.businessId);
+
     setLoading(false);
+  }
+
+  // Chaje kès OPEN la epi kalkile total kach li an dirèk depi payments
+  async function loadSession(businessId: string) {
+    const supabase = createClient();
+    const { data: sess } = await supabase
+      .from('cash_sessions')
+      .select('id, opening_amount, cash_out, currency, opened_at')
+      .eq('business_id', businessId)
+      .eq('status', 'OPEN')
+      .maybeSingle();
+
+    if (!sess) {
+      setSession(null);
+      setSessionCashSales(0);
+      setShowOpenModal(true); // pa gen kès → mande ouvèti
+      return;
+    }
+
+    setSession(sess);
+    setShowOpenModal(false);
+    await refreshCashSales(sess.id);
+  }
+
+  // Kalkile total vant CASH pou yon sesyon (sous verite = payments)
+  async function refreshCashSales(sessionId: string) {
+    const supabase = createClient();
+    const { data: pays } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('session_id', sessionId)
+      .eq('method', 'cash');
+    const total = (pays ?? []).reduce((s, p: any) => s + Number(p.amount || 0), 0);
+    setSessionCashSales(total);
+  }
+
+  // Ouvri kès la
+  async function openSession() {
+    const amount = parseFloat(openingInput);
+    if (isNaN(amount) || amount < 0) { setMsg('Antre yon fon de kès valab.'); return; }
+    setOpeningBusy(true);
+
+    const supabase = createClient();
+    const ctx = await getBusinessContext();
+    if (!ctx) { setOpeningBusy(false); return; }
+
+    const { data, error } = await supabase.from('cash_sessions').insert({
+      business_id: ctx.businessId,
+      opened_by: ctx.userId,
+      status: 'OPEN',
+      opening_amount: amount,
+      currency: currency,
+    }).select('id, opening_amount, cash_out, currency, opened_at').single();
+
+    setOpeningBusy(false);
+    if (error) { setMsg('Erè ouvèti kès: ' + error.message); return; }
+
+    setSession(data);
+    setSessionCashSales(0);
+    setShowOpenModal(false);
+    setOpeningInput('');
+    setTimeout(() => barcodeRef.current?.focus(), 0);
   }
 
   const filtered = products.filter(p =>
@@ -155,13 +262,10 @@ export default function PosPage() {
     setScanMsg({ type: 'success', text: `✓ ${prod.name} ajoute nan panye a` });
   }
 
-  // Kenbe yon referans ki toujou pwente sou dènye vèsyon processBarcode la
-  // (paske callback kamera a anrejistre yon sèl fwa)
   useEffect(() => {
     processBarcodeRef.current = processBarcode;
   });
 
-  // Tape / eskanè USB + Enter
   function handleBarcodeSubmit(e: React.FormEvent) {
     e.preventDefault();
     const code = barcodeInput.trim();
@@ -170,17 +274,15 @@ export default function PosPage() {
     processBarcode(code);
   }
 
-  // Louvri / fèmen kamera a
   function openScanner() {
     setScannerError('');
     setScanMsg(null);
     setShowScanner(true);
   }
   function closeScanner() {
-    setShowScanner(false); // netwayaj effect la ap fèmen kamera a
+    setShowScanner(false);
   }
 
-  // Demare kamera a lè modal la louvri
   useEffect(() => {
     if (!showScanner) return;
     let active = true;
@@ -192,22 +294,21 @@ export default function PosPage() {
         const scanner = new Html5Qrcode('barcode-scanner-region');
         scannerRef.current = scanner;
         await scanner.start(
-          { facingMode: 'environment' }, // kamera dèyè a
+          { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 280, height: 160 } },
           (decodedText: string) => {
             const now = Date.now();
-            // Anpeche menm barcode la ajoute plizyè fwa nan yon segond
             if (
               decodedText === lastScanRef.current.code &&
               now - lastScanRef.current.time < 1500
             ) return;
             lastScanRef.current = { code: decodedText, time: now };
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
-              navigator.vibrate(80); // ti vibrasyon konfimasyon
+              navigator.vibrate(80);
             }
             processBarcodeRef.current(decodedText);
           },
-          () => { /* inyore erè pa fram (nòmal) */ }
+          () => { /* inyore erè pa fram */ }
         );
       } catch (err: any) {
         if (active) {
@@ -258,6 +359,7 @@ export default function PosPage() {
 
   function openPayment() {
     if (cart.length === 0) return;
+    if (!session) { setShowOpenModal(true); return; }
     setCashGiven('');
     setMsg('');
     setShowPayment(true);
@@ -268,6 +370,7 @@ export default function PosPage() {
       setMsg('Kòb kliyan bay la pa ase.');
       return;
     }
+    if (!session) { setMsg('Pa gen kès louvri.'); return; }
     setProcessing(true);
     setMsg('');
 
@@ -283,7 +386,7 @@ export default function PosPage() {
       product_id: it.product_id,
     }));
 
-    // 1) Kreye fakti a (vant POS, peye konplè)
+    // 1) Kreye fakti a (vant POS, peye konplè) — make ak sesyon an
     const { data: inserted, error } = await supabase.from('invoices').insert({
       business_id: ctx.businessId,
       client_id: null,
@@ -298,6 +401,7 @@ export default function PosPage() {
       status: 'paid',
       source: 'pos',
       created_by: ctx.userId,
+      session_id: session.id,
       metadata: {
         items: saleItems,
         discount: 0,
@@ -312,12 +416,13 @@ export default function PosPage() {
       return;
     }
 
-    // 2) Anrejistre peman an
+    // 2) Anrejistre peman an — make ak sesyon an
     await supabase.from('payments').insert({
       invoice_id: inserted.id,
       business_id: ctx.businessId,
       amount: total,
       method: 'cash',
+      session_id: session.id,
     });
 
     // 3) Desann stock
@@ -342,13 +447,22 @@ export default function PosPage() {
       change,
     });
 
+    // 5) Mete total kach kès la ajou (kalkile ankò depi payments)
+    await refreshCashSales(session.id);
+
     setProcessing(false);
     setShowPayment(false);
     setCart([]);
     setCashGiven('');
     setScanMsg(null);
     setTimeout(() => barcodeRef.current?.focus(), 0);
-    load();
+    // Rechaje pwodwi yo (stock ajou)
+    const { data: freshProducts } = await supabase
+      .from('products')
+      .select('id, name, sale_price, quantity, image_url, barcode')
+      .eq('business_id', ctx.businessId)
+      .order('name');
+    setProducts(freshProducts ?? []);
   }
 
   function closeReceipt() {
@@ -357,6 +471,78 @@ export default function PosPage() {
 
   function printReceipt() {
     window.print();
+  }
+
+  // ===== Fèmti kès =====
+  function openCloseModal() {
+    if (!session) return;
+    setCountedInput('');
+    setCashOutInput('');
+    setMsg('');
+    setShowCloseModal(true);
+  }
+
+  // Kalkil an dirèk nan modal fèmti a
+  const closeCashOut = parseFloat(cashOutInput) || 0;
+  const closeExpected = session ? session.opening_amount + sessionCashSales - closeCashOut : 0;
+  const closeCounted = parseFloat(countedInput);
+  const closeEcart = !isNaN(closeCounted) ? closeCounted - closeExpected : 0;
+
+  async function closeSession() {
+    if (!session) return;
+    if (isNaN(closeCounted) || closeCounted < 0) { setMsg('Antre kòb ou konte a.'); return; }
+    setClosingBusy(true);
+
+    const supabase = createClient();
+    const ctx = await getBusinessContext();
+    if (!ctx) { setClosingBusy(false); return; }
+
+    // Rekalkile total kach la yon dènye fwa (nan ka yon vant fèt antretan)
+    const { data: pays } = await supabase
+      .from('payments')
+      .select('amount')
+      .eq('session_id', session.id)
+      .eq('method', 'cash');
+    const totalCash = (pays ?? []).reduce((s, p: any) => s + Number(p.amount || 0), 0);
+    const expected = session.opening_amount + totalCash - closeCashOut;
+    const ecart = closeCounted - expected;
+    const closedAtIso = new Date().toISOString();
+
+    const { error } = await supabase.from('cash_sessions').update({
+      status: 'CLOSED',
+      closed_by: ctx.userId,
+      cash_out: closeCashOut,
+      counted_amount: closeCounted,
+      total_cash_sales: totalCash,   // snapshot fije
+      expected_amount: expected,     // snapshot fije
+      ecart: ecart,                  // snapshot fije
+      closed_at: closedAtIso,
+    }).eq('id', session.id);
+
+    setClosingBusy(false);
+    if (error) { setMsg('Erè fèmti kès: ' + error.message); return; }
+
+    // Prepare Rapò Z a
+    setZReport({
+      openingAmount: session.opening_amount,
+      totalCashSales: totalCash,
+      cashOut: closeCashOut,
+      expected,
+      counted: closeCounted,
+      ecart,
+      openedAt: session.opened_at,
+      closedAt: closedAtIso,
+      cashierName: ctx.fullName || 'Itilizatè',
+    });
+
+    setShowCloseModal(false);
+    setSession(null);
+    setSessionCashSales(0);
+  }
+
+  function closeZReport() {
+    setZReport(null);
+    setShowOpenModal(true); // apre fèmti, mande ouvèti pou pwochen jounen an
   }
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
@@ -368,7 +554,28 @@ export default function PosPage() {
       {/* ===== GOCH: Lis pwodwi ===== */}
       <div className="flex-1 flex flex-col p-4 overflow-hidden print:hidden">
         <div className="mb-3">
-          <h1 className="text-xl font-semibold text-gray-900 mb-2">Sistèm Vant</h1>
+          <div className="flex justify-between items-center mb-2">
+            <h1 className="text-xl font-semibold text-gray-900">Sistèm Vant</h1>
+            {session && (
+              <button onClick={openCloseModal}
+                className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-200 whitespace-nowrap">
+                🔒 Fèmen Kès
+              </button>
+            )}
+          </div>
+
+          {/* Endikatè kès */}
+          {session && (
+            <div className="mb-2 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">
+              <span className="text-emerald-700 flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+                Kès louvri
+              </span>
+              <span className="text-emerald-800">
+                Kach jounen an: <strong>{fmt(sessionCashSales)}</strong>
+              </span>
+            </div>
+          )}
 
           {/* Eskane barcode (tape / eskanè USB) */}
           <form onSubmit={handleBarcodeSubmit} className="mb-2">
@@ -514,6 +721,40 @@ export default function PosPage() {
         </div>
       </div>
 
+      {/* ===== MODAL OUVÈTI KÈS (bloke ekran an) ===== */}
+      {showOpenModal && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Ouvèti Kès</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              Antre fon de kès la (kòb ki nan kès la kounye a) pou w ka kòmanse vann.
+            </p>
+
+            <label className="text-sm text-gray-600 font-medium">Fon de kès ({currency})</label>
+            <input
+              type="number"
+              autoFocus
+              placeholder="Egzanp: 5000"
+              value={openingInput}
+              onChange={e => setOpeningInput(e.target.value)}
+              className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg text-lg font-semibold text-right focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+
+            {msg && (
+              <div className="mt-3 text-sm rounded-lg p-2 bg-red-50 text-red-700">{msg}</div>
+            )}
+
+            <button
+              onClick={openSession}
+              disabled={openingBusy}
+              className="w-full mt-5 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
+            >
+              {openingBusy ? 'Ap ouvri...' : 'Ouvri kès la'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL KAMERA ===== */}
       {showScanner && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 print:hidden">
@@ -612,17 +853,166 @@ export default function PosPage() {
         </div>
       )}
 
+      {/* ===== MODAL FÈMTI KÈS ===== */}
+      {showCloseModal && session && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden"
+          onClick={() => !closingBusy && setShowCloseModal(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Fèmen Kès</h2>
+
+            <div className="space-y-2 text-sm bg-gray-50 rounded-xl p-4 mb-4">
+              <div className="flex justify-between">
+                <span className="text-gray-500">Fon de kès</span>
+                <span className="font-medium">{fmt(session.opening_amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">Total vant cash</span>
+                <span className="font-medium">{fmt(sessionCashSales)}</span>
+              </div>
+            </div>
+
+            <label className="text-sm text-gray-600 font-medium">Sòti espès (opsyonèl)</label>
+            <input
+              type="number"
+              placeholder="0"
+              value={cashOutInput}
+              onChange={e => setCashOutInput(e.target.value)}
+              className="w-full mt-1 mb-1 px-4 py-2.5 border border-gray-200 rounded-lg text-right focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+            <p className="text-xs text-gray-400 mb-3">Kòb ou retire nan kès la pandan jounen an (depans, monnen, elatriye).</p>
+
+            <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2.5 mb-4">
+              <span className="text-sm text-blue-700 font-medium">Total dwe genyen</span>
+              <span className="text-lg font-bold text-blue-800">{fmt(closeExpected)}</span>
+            </div>
+
+            <label className="text-sm text-gray-600 font-medium">Kòb ou konte nan kès la</label>
+            <input
+              type="number"
+              autoFocus
+              placeholder="0"
+              value={countedInput}
+              onChange={e => setCountedInput(e.target.value)}
+              className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg text-lg font-semibold text-right focus:outline-none focus:ring-2 focus:ring-green-500"
+            />
+
+            {!isNaN(closeCounted) && (
+              <div className={`flex justify-between items-center mt-3 px-1`}>
+                <span className="text-gray-600">Diferans</span>
+                <span className={`text-xl font-bold ${
+                  closeEcart === 0 ? 'text-green-600' : closeEcart < 0 ? 'text-red-600' : 'text-amber-600'
+                }`}>
+                  {closeEcart > 0 ? '+' : ''}{fmt(closeEcart)}
+                </span>
+              </div>
+            )}
+
+            {msg && (
+              <div className="mt-3 text-sm rounded-lg p-2 bg-red-50 text-red-700">{msg}</div>
+            )}
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setShowCloseModal(false)}
+                disabled={closingBusy}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50"
+              >
+                Anile
+              </button>
+              <button
+                onClick={closeSession}
+                disabled={closingBusy || isNaN(closeCounted)}
+                className="flex-1 py-3 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 disabled:opacity-40"
+              >
+                {closingBusy ? 'Ap fèmen...' : 'Fèmen kès la'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL RAPÒ Z (apre fèmti) ===== */}
+      {zReport && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block">
+          <div className="bg-white rounded-2xl w-full max-w-sm my-4 print:rounded-none print:max-w-none print:my-0">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center print:hidden">
+              <h2 className="font-semibold text-gray-800">✓ Kès fèmen</h2>
+              <button onClick={closeZReport} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            {/* Rapò Z (fòma tikè 80mm) */}
+            <div id="receipt-print" className="receipt-ticket">
+              <div className="text-center">
+                <div className="biz-name">{biz?.business_name}</div>
+                <div className="line">RAPÒ FÈMTI KÈS (Z)</div>
+              </div>
+
+              <div className="divider"></div>
+
+              <div className="line">Kesye: {zReport.cashierName}</div>
+              <div className="line">Ouvèti: {fmtDateTime(zReport.openedAt)}</div>
+              <div className="line">Fèmti: {fmtDateTime(zReport.closedAt)}</div>
+
+              <div className="divider"></div>
+
+              <div className="item-row">
+                <span>Fon de kès</span>
+                <span>{fmt(zReport.openingAmount)}</span>
+              </div>
+              <div className="item-row">
+                <span>Total vant cash</span>
+                <span>{fmt(zReport.totalCashSales)}</span>
+              </div>
+              <div className="item-row">
+                <span>Sòti espès</span>
+                <span>- {fmt(zReport.cashOut)}</span>
+              </div>
+
+              <div className="divider"></div>
+
+              <div className="total-row">
+                <span>DWE GENYEN</span>
+                <span>{fmt(zReport.expected)}</span>
+              </div>
+              <div className="item-row">
+                <span>Kòb konte</span>
+                <span>{fmt(zReport.counted)}</span>
+              </div>
+              <div className="total-row">
+                <span>DIFERANS</span>
+                <span>{zReport.ecart > 0 ? '+' : ''}{fmt(zReport.ecart)}</span>
+              </div>
+
+              <div className="divider"></div>
+
+              <div className="text-center footer-text">
+                {zReport.ecart === 0 ? 'Kès la balanse.' : zReport.ecart < 0 ? 'Kès la manke kòb.' : 'Kès la gen twòp kòb.'}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-gray-100 flex gap-2 print:hidden">
+              <button onClick={closeZReport}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">
+                Fèmen
+              </button>
+              <button onClick={printReceipt}
+                className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+                Enprime rapò
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== MODAL RESI ===== */}
       {receipt && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block">
           <div className="bg-white rounded-2xl w-full max-w-sm my-4 print:rounded-none print:max-w-none print:my-0">
-            {/* Antèt modal (pa enprime) */}
             <div className="p-4 border-b border-gray-100 flex justify-between items-center print:hidden">
               <h2 className="font-semibold text-gray-800">✓ Vant fini</h2>
               <button onClick={closeReceipt} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
             </div>
 
-            {/* ===== RESI TIKÈ 80mm ===== */}
             <div id="receipt-print" className="receipt-ticket">
               <div className="text-center">
                 <div className="biz-name">{biz?.business_name}</div>
@@ -673,7 +1063,6 @@ export default function PosPage() {
               </div>
             </div>
 
-            {/* Bouton yo (pa enprime) */}
             <div className="p-4 border-t border-gray-100 flex gap-2 print:hidden">
               <button onClick={closeReceipt}
                 className="flex-1 py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">
@@ -738,8 +1127,13 @@ export default function PosPage() {
           text-align: center;
         }
 
-        /* Lè n ap enprime: montre SÈLMAN resi a */
+        /* ===== ENPRIME: montre SÈLMAN resi a, optimize pou tèmik 80mm ===== */
         @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+          }
           body * {
             visibility: hidden;
           }
@@ -751,6 +1145,21 @@ export default function PosPage() {
             left: 0;
             top: 0;
             width: 80mm;
+            padding: 4mm 3mm !important;
+            color: #000 !important;
+            font-size: 12px;
+            line-height: 1.35;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          #receipt-print .divider {
+            border-top: 1px dashed #000 !important;
+            margin: 6px 0 !important;
+          }
+          #receipt-print .item,
+          #receipt-print .item-row,
+          #receipt-print .total-row {
+            page-break-inside: avoid;
           }
           @page {
             size: 80mm auto;
