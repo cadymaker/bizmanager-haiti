@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
@@ -24,6 +24,12 @@ export default function InventoryPage() {
   const [msg, setMsg] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+
+  // Eskane ak kamera
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+  const scannerRef = useRef<any>(null);
+  const handledRef = useRef(false);
 
   const [form, setForm] = useState({
     name: '', category: '', description: '',
@@ -106,6 +112,64 @@ export default function InventoryPage() {
     setForm(f => ({ ...f, image_url: urlData.publicUrl }));
     setUploading(false);
   }
+
+  // ===== Eskane ak kamera =====
+  function openScanner() {
+    setScannerError('');
+    handledRef.current = false;
+    setShowScanner(true);
+  }
+  function closeScanner() {
+    setShowScanner(false); // netwayaj effect la ap fèmen kamera a
+  }
+
+  // Demare kamera a lè modal la louvri
+  useEffect(() => {
+    if (!showScanner) return;
+    let active = true;
+
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (!active) return;
+        const scanner = new Html5Qrcode('barcode-scanner-region');
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: 'environment' }, // kamera dèyè a
+          { fps: 10, qrbox: { width: 280, height: 160 } },
+          (decodedText: string) => {
+            // Pran sèlman premye eskan reyisi a, epi fèmen
+            if (handledRef.current) return;
+            handledRef.current = true;
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate(80);
+            }
+            setForm(f => ({ ...f, barcode: decodedText }));
+            setMsg('Barcode eskane: ' + decodedText);
+            setTimeout(() => setMsg(''), 3000);
+            setShowScanner(false);
+          },
+          () => { /* inyore erè pa fram (nòmal) */ }
+        );
+      } catch (err: any) {
+        if (active) {
+          setScannerError(
+            'Pa ka louvri kamera a. Verifye ou bay pèmisyon kamera a nan browser la. ' +
+            (err?.message || '')
+          );
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      const scanner = scannerRef.current;
+      if (scanner) {
+        scanner.stop().then(() => scanner.clear()).catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, [showScanner]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -219,13 +283,19 @@ export default function InventoryPage() {
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
 
-          {/* Chan Barcode */}
+          {/* Chan Barcode ak bouton kamera */}
           <div>
             <label className="text-xs text-gray-500 font-medium">Barcode (opsyonèl)</label>
-            <input placeholder="Eskane oswa tape nimewo barcode la"
-              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} />
-            <p className="text-xs text-gray-400 mt-1">Mete barcode pwodwi a pou w ka eskane l nan sistèm vant lan.</p>
+            <div className="flex gap-2 mt-1">
+              <input placeholder="Eskane oswa tape nimewo barcode la"
+                className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+                value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} />
+              <button type="button" onClick={openScanner}
+                className="px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100 whitespace-nowrap flex items-center gap-1">
+                📷 Eskane
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Eskane barcode pwodwi a ak kamera a, oswa tape l alamen.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -335,6 +405,40 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {/* ===== MODAL KAMERA ===== */}
+      {showScanner && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-semibold text-gray-800">📷 Eskane barcode pwodwi a</h2>
+              <button onClick={closeScanner} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            <div className="p-4">
+              {scannerError ? (
+                <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">
+                  {scannerError}
+                </div>
+              ) : (
+                <>
+                  <div id="barcode-scanner-region" className="w-full rounded-lg overflow-hidden bg-black" />
+                  <p className="text-center text-xs text-gray-500 mt-2">
+                    Pwente kamera a sou barcode pwodwi a
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100 flex justify-end">
+              <button onClick={closeScanner}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">
+                Fèmen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
