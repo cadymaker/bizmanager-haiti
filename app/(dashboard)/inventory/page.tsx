@@ -31,6 +31,9 @@ export default function InventoryPage() {
   const scannerRef = useRef<any>(null);
   const handledRef = useRef(false);
 
+  // Apèsi barcode (jenere / enprime etikèt)
+  const barcodeSvgRef = useRef<SVGSVGElement>(null);
+
   const [form, setForm] = useState({
     name: '', category: '', description: '',
     purchase_price: '', sale_price: '', quantity: '', image_url: '', barcode: '',
@@ -111,6 +114,70 @@ export default function InventoryPage() {
     const { data: urlData } = supabase.storage.from('products').getPublicUrl(fileName);
     setForm(f => ({ ...f, image_url: urlData.publicUrl }));
     setUploading(false);
+  }
+
+  // ===== Jenere barcode pou pwodwi lokal =====
+  function generateBarcode() {
+    let code = '';
+    let attempts = 0;
+    do {
+      const rand = Math.floor(100000 + Math.random() * 900000); // 6 chif
+      code = '20' + rand; // prefiks 20 = kòd entèn (pwodwi lokal)
+      attempts++;
+    } while (products.some(p => p.barcode === code) && attempts < 30);
+
+    setForm(f => ({ ...f, barcode: code }));
+    setMsg('Barcode jenere: ' + code);
+    setTimeout(() => setMsg(''), 3000);
+  }
+
+  // Desine apèsi barcode la lè kòd la chanje
+  useEffect(() => {
+    const code = form.barcode.trim();
+    if (!code || !barcodeSvgRef.current) return;
+    let cancelled = false;
+    (async () => {
+      const mod: any = await import('jsbarcode');
+      if (cancelled || !barcodeSvgRef.current) return;
+      const JsBarcode = mod.default || mod;
+      try {
+        JsBarcode(barcodeSvgRef.current, code, {
+          format: 'CODE128',
+          displayValue: true,
+          fontSize: 14,
+          height: 55,
+          width: 2,
+          margin: 8,
+        });
+      } catch {
+        /* valè barcode envalid — inyore */
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [form.barcode]);
+
+  // Enprime yon etikèt ak barcode a
+  function printLabel() {
+    const code = form.barcode.trim();
+    if (!code || !barcodeSvgRef.current) return;
+
+    const svgData = new XMLSerializer().serializeToString(barcodeSvgRef.current);
+    const priceNum = parseFloat(form.sale_price);
+    const priceLine = !isNaN(priceNum) && priceNum > 0 ? fmt(priceNum) : '';
+
+    const win = window.open('', '', 'width=420,height=320');
+    if (!win) return;
+    win.document.write(
+      '<html><head><title>Etikèt pwodwi</title></head>' +
+      '<body style="margin:0;padding:12px;text-align:center;font-family:sans-serif;">' +
+      (form.name ? '<div style="font-weight:bold;font-size:14px;margin-bottom:4px;">' + form.name + '</div>' : '') +
+      svgData +
+      (priceLine ? '<div style="font-size:14px;font-weight:bold;margin-top:4px;">' + priceLine + '</div>' : '') +
+      '</body></html>'
+    );
+    win.document.close();
+    win.focus();
+    setTimeout(() => { win.print(); win.close(); }, 400);
   }
 
   // ===== Eskane ak kamera =====
@@ -283,19 +350,36 @@ export default function InventoryPage() {
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
 
-          {/* Chan Barcode ak bouton kamera */}
+          {/* Chan Barcode: eskane / tape / jenere + apèsi */}
           <div>
             <label className="text-xs text-gray-500 font-medium">Barcode (opsyonèl)</label>
             <div className="flex gap-2 mt-1">
-              <input placeholder="Eskane oswa tape nimewo barcode la"
+              <input placeholder="Eskane, tape, oswa jenere barcode la"
                 className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
                 value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} />
               <button type="button" onClick={openScanner}
                 className="px-3 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100 whitespace-nowrap flex items-center gap-1">
                 📷 Eskane
               </button>
+              <button type="button" onClick={generateBarcode}
+                className="px-3 py-2 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-medium hover:bg-purple-100 whitespace-nowrap flex items-center gap-1">
+                ⚙️ Jenere
+              </button>
             </div>
-            <p className="text-xs text-gray-400 mt-1">Eskane barcode pwodwi a ak kamera a, oswa tape l alamen.</p>
+            <p className="text-xs text-gray-400 mt-1">
+              Pwodwi enpòte: eskane oswa tape barcode faktori a. Pwodwi lokal san barcode: klike "Jenere".
+            </p>
+
+            {/* Apèsi barcode + enprime etikèt */}
+            {form.barcode.trim() && (
+              <div className="mt-3 border border-gray-200 rounded-lg p-3 flex flex-col items-center gap-2 bg-gray-50">
+                <svg ref={barcodeSvgRef} />
+                <button type="button" onClick={printLabel}
+                  className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-xs font-medium hover:bg-black">
+                  🖨️ Enprime etikèt
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
