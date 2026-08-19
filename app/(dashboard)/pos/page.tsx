@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
@@ -10,6 +10,7 @@ interface Product {
   sale_price: number;
   quantity: number;
   image_url: string | null;
+  barcode: string | null;
 }
 
 interface CartItem {
@@ -60,6 +61,18 @@ export default function PosPage() {
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // Eskane barcode (tape / eskanè USB)
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [scanMsg, setScanMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const barcodeRef = useRef<HTMLInputElement>(null);
+
+  // Eskane ak kamera
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannerError, setScannerError] = useState('');
+  const scannerRef = useRef<any>(null);
+  const lastScanRef = useRef<{ code: string; time: number }>({ code: '', time: 0 });
+  const processBarcodeRef = useRef<(code: string) => void>(() => {});
+
   // Peman
   const [showPayment, setShowPayment] = useState(false);
   const [cashGiven, setCashGiven] = useState('');
@@ -87,7 +100,7 @@ export default function PosPage() {
 
     const { data } = await supabase
       .from('products')
-      .select('id, name, sale_price, quantity, image_url')
+      .select('id, name, sale_price, quantity, image_url, barcode')
       .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(data ?? []);
@@ -118,6 +131,104 @@ export default function PosPage() {
     });
   }
 
+  // Lojik pataje: tape, eskanè USB, ak kamera tout pase la
+  function processBarcode(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+
+    const prod = products.find(p => p.barcode && p.barcode === trimmed);
+    if (!prod) {
+      setScanMsg({ type: 'error', text: `Pa jwenn okenn pwodwi ak barcode: ${trimmed}` });
+      return;
+    }
+    if (prod.quantity <= 0) {
+      setScanMsg({ type: 'error', text: `${prod.name} — pa gen an stock (fini).` });
+      return;
+    }
+    const existing = cart.find(it => it.product_id === prod.id);
+    if (existing && existing.quantity >= prod.quantity) {
+      setScanMsg({ type: 'error', text: `${prod.name} — maksimòm stock rive (${prod.quantity}).` });
+      return;
+    }
+
+    addToCart(prod);
+    setScanMsg({ type: 'success', text: `✓ ${prod.name} ajoute nan panye a` });
+  }
+
+  // Kenbe yon referans ki toujou pwente sou dènye vèsyon processBarcode la
+  // (paske callback kamera a anrejistre yon sèl fwa)
+  useEffect(() => {
+    processBarcodeRef.current = processBarcode;
+  });
+
+  // Tape / eskanè USB + Enter
+  function handleBarcodeSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const code = barcodeInput.trim();
+    setBarcodeInput('');
+    setTimeout(() => barcodeRef.current?.focus(), 0);
+    processBarcode(code);
+  }
+
+  // Louvri / fèmen kamera a
+  function openScanner() {
+    setScannerError('');
+    setScanMsg(null);
+    setShowScanner(true);
+  }
+  function closeScanner() {
+    setShowScanner(false); // netwayaj effect la ap fèmen kamera a
+  }
+
+  // Demare kamera a lè modal la louvri
+  useEffect(() => {
+    if (!showScanner) return;
+    let active = true;
+
+    (async () => {
+      try {
+        const { Html5Qrcode } = await import('html5-qrcode');
+        if (!active) return;
+        const scanner = new Html5Qrcode('barcode-scanner-region');
+        scannerRef.current = scanner;
+        await scanner.start(
+          { facingMode: 'environment' }, // kamera dèyè a
+          { fps: 10, qrbox: { width: 280, height: 160 } },
+          (decodedText: string) => {
+            const now = Date.now();
+            // Anpeche menm barcode la ajoute plizyè fwa nan yon segond
+            if (
+              decodedText === lastScanRef.current.code &&
+              now - lastScanRef.current.time < 1500
+            ) return;
+            lastScanRef.current = { code: decodedText, time: now };
+            if (typeof navigator !== 'undefined' && navigator.vibrate) {
+              navigator.vibrate(80); // ti vibrasyon konfimasyon
+            }
+            processBarcodeRef.current(decodedText);
+          },
+          () => { /* inyore erè pa fram (nòmal) */ }
+        );
+      } catch (err: any) {
+        if (active) {
+          setScannerError(
+            'Pa ka louvri kamera a. Verifye ou bay pèmisyon kamera a nan browser la. ' +
+            (err?.message || '')
+          );
+        }
+      }
+    })();
+
+    return () => {
+      active = false;
+      const scanner = scannerRef.current;
+      if (scanner) {
+        scanner.stop().then(() => scanner.clear()).catch(() => {});
+        scannerRef.current = null;
+      }
+    };
+  }, [showScanner]);
+
   function changeQty(productId: string, delta: number) {
     setCart(prev => prev.map(it => {
       if (it.product_id !== productId) return it;
@@ -135,6 +246,7 @@ export default function PosPage() {
   function clearCart() {
     if (cart.length > 0 && !confirm('Vide panye a?')) return;
     setCart([]);
+    setScanMsg(null);
   }
 
   const total = cart.reduce((s, it) => s + it.unit_price * it.quantity, 0);
@@ -234,6 +346,8 @@ export default function PosPage() {
     setShowPayment(false);
     setCart([]);
     setCashGiven('');
+    setScanMsg(null);
+    setTimeout(() => barcodeRef.current?.focus(), 0);
     load();
   }
 
@@ -255,9 +369,47 @@ export default function PosPage() {
       <div className="flex-1 flex flex-col p-4 overflow-hidden print:hidden">
         <div className="mb-3">
           <h1 className="text-xl font-semibold text-gray-900 mb-2">Sistèm Vant</h1>
+
+          {/* Eskane barcode (tape / eskanè USB) */}
+          <form onSubmit={handleBarcodeSubmit} className="mb-2">
+            <label className="text-xs text-gray-500 font-medium mb-1 block">Eskane barcode</label>
+            <div className="flex gap-2">
+              <input
+                ref={barcodeRef}
+                type="text"
+                placeholder="Eskane oswa tape barcode, apre peze Enter"
+                value={barcodeInput}
+                onChange={e => setBarcodeInput(e.target.value)}
+                className="flex-1 px-4 py-2.5 border-2 border-indigo-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-400"
+                autoFocus
+              />
+              <button type="submit"
+                className="px-4 py-2.5 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 whitespace-nowrap">
+                Ajoute
+              </button>
+            </div>
+          </form>
+
+          {/* Bouton kamera */}
+          <button
+            type="button"
+            onClick={openScanner}
+            className="w-full mb-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100 flex items-center justify-center gap-2"
+          >
+            📷 Eskane ak kamera
+          </button>
+
+          {scanMsg && (
+            <div className={`mb-2 text-sm rounded-lg px-3 py-2 ${
+              scanMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+            }`}>
+              {scanMsg.text}
+            </div>
+          )}
+
           <input
             type="text"
-            placeholder="Chèche yon pwodwi..."
+            placeholder="Chèche yon pwodwi pa non..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full px-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -361,6 +513,51 @@ export default function PosPage() {
           </button>
         </div>
       </div>
+
+      {/* ===== MODAL KAMERA ===== */}
+      {showScanner && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 print:hidden">
+          <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden">
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-semibold text-gray-800">📷 Eskane pwodwi</h2>
+              <button onClick={closeScanner} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            <div className="p-4">
+              {scannerError ? (
+                <div className="bg-red-50 text-red-700 text-sm rounded-lg p-3">
+                  {scannerError}
+                </div>
+              ) : (
+                <>
+                  <div id="barcode-scanner-region" className="w-full rounded-lg overflow-hidden bg-black" />
+                  <p className="text-center text-xs text-gray-500 mt-2">
+                    Pwente kamera a sou barcode pwodwi a
+                  </p>
+                </>
+              )}
+
+              {scanMsg && (
+                <div className={`mt-3 text-sm rounded-lg px-3 py-2 ${
+                  scanMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                }`}>
+                  {scanMsg.text}
+                </div>
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
+              <div className="text-sm text-gray-600">
+                Panye: <strong className="text-gray-900">{itemCount}</strong> atik • <strong className="text-gray-900">{fmt(total)}</strong>
+              </div>
+              <button onClick={closeScanner}
+                className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">
+                Fèmen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== MODAL PEMAN ===== */}
       {showPayment && (

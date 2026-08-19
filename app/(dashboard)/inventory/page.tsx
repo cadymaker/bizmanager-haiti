@@ -13,6 +13,7 @@ interface Product {
   sale_price: number;
   quantity: number;
   image_url: string | null;
+  barcode: string | null;
 }
 
 export default function InventoryPage() {
@@ -26,7 +27,7 @@ export default function InventoryPage() {
 
   const [form, setForm] = useState({
     name: '', category: '', description: '',
-    purchase_price: '', sale_price: '', quantity: '', image_url: '',
+    purchase_price: '', sale_price: '', quantity: '', image_url: '', barcode: '',
   });
 
   useEffect(() => { load(); }, []);
@@ -54,7 +55,7 @@ export default function InventoryPage() {
   }
 
   function resetForm() {
-    setForm({ name: '', category: '', description: '', purchase_price: '', sale_price: '', quantity: '', image_url: '' });
+    setForm({ name: '', category: '', description: '', purchase_price: '', sale_price: '', quantity: '', image_url: '', barcode: '' });
     setEditId(null);
     setShowForm(false);
   }
@@ -68,6 +69,7 @@ export default function InventoryPage() {
       sale_price: String(p.sale_price),
       quantity: String(p.quantity),
       image_url: p.image_url ?? '',
+      barcode: p.barcode ?? '',
     });
     setEditId(p.id);
     setShowForm(true);
@@ -122,6 +124,7 @@ export default function InventoryPage() {
       sale_price: parseFloat(form.sale_price) || 0,
       quantity: parseInt(form.quantity) || 0,
       image_url: form.image_url || null,
+      barcode: form.barcode.trim() || null,
     };
 
     let error;
@@ -215,6 +218,16 @@ export default function InventoryPage() {
           <input placeholder="Deskripsyon (opsyonèl)"
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+
+          {/* Chan Barcode */}
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Barcode (opsyonèl)</label>
+            <input placeholder="Eskane oswa tape nimewo barcode la"
+              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} />
+            <p className="text-xs text-gray-400 mt-1">Mete barcode pwodwi a pou w ka eskane l nan sistèm vant lan.</p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <label className="text-xs text-gray-500">Pri acha</label>
@@ -274,7 +287,11 @@ export default function InventoryPage() {
                     </div>
                     <div>
                       <div className="font-medium">{p.name}</div>
-                      {p.description && <div className="text-xs text-gray-400">{p.description}</div>}
+                      {p.barcode ? (
+                        <div className="text-xs text-gray-400">⬛ {p.barcode}</div>
+                      ) : p.description ? (
+                        <div className="text-xs text-gray-400">{p.description}</div>
+                      ) : null}
                     </div>
                   </div>
                 </td>
