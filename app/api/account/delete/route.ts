@@ -111,7 +111,7 @@ export async function POST(req: NextRequest) {
       if (!otherLinks || otherLinks.length === 0) authIds.add(uid);
     }
 
-    for (const uid of authIds) {
+    for (const uid of Array.from(authIds)) {
       await supabaseAdmin.auth.admin.deleteUser(uid);
     }
 

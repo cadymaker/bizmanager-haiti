@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     }
 
     let deletedUsers = 0;
-    for (const uid of authIdsToDelete) {
+    for (const uid of Array.from(authIdsToDelete)) {
       const { error } = await supabaseAdmin.auth.admin.deleteUser(uid);
       if (!error) deletedUsers++;
     }
