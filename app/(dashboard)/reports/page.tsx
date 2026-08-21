@@ -197,32 +197,41 @@ export default function ReportsPage() {
   const maxDay = Math.max(...dayPoints.map(p => p.total), 1);
   const periodLabel = PERIODS.find(p => p.value === period)?.label ?? '';
 
-  // Ekspòte CSV
+  // Ekspòte CSV (separatè ';' pou Excel franse, chif san gimè)
   function exportCSV() {
+    // Tèks → antoure ak gimè. Chif → kite jan l ye pou Excel ka kalkile.
+    const txt = (v: any) => `"${String(v).replace(/"/g, '""')}"`;
+    const num = (v: number) => String(Math.round(Number(v) * 100) / 100);
+
     const rows: string[][] = [];
-    rows.push(['Rapò BizManager', periodLabel]);
+    rows.push([txt('Rapò BizManager'), txt(periodLabel)]);
     rows.push([]);
-    rows.push(['REZIME']);
-    rows.push(['Vant total', String(totalSales)]);
-    rows.push(['Kou pwodwi vann', String(totalCost)]);
-    rows.push(['Depans', String(totalExpenses)]);
-    rows.push(['Pèt nan stock', String(totalLoss)]);
-    rows.push(['Benefis nèt', String(netProfit)]);
-    rows.push(['Kantite vant', String(saleCount)]);
+    rows.push([txt('REZIME')]);
+    rows.push([txt('Vant total'), num(totalSales)]);
+    rows.push([txt('Kou pwodwi vann'), num(totalCost)]);
+    rows.push([txt('Depans'), num(totalExpenses)]);
+    rows.push([txt('Pèt nan stock'), num(totalLoss)]);
+    rows.push([txt('Benefis nèt'), num(netProfit)]);
+    rows.push([txt('Kantite vant'), num(saleCount)]);
     rows.push([]);
-    rows.push(['TOP PWODWI']);
-    rows.push(['Pwodwi', 'Kantite vann', 'Revni', 'Kou', 'Benefis']);
+    rows.push([txt('TOP PWODWI')]);
+    rows.push([txt('Pwodwi'), txt('Kantite vann'), txt('Revni'), txt('Kou'), txt('Benefis')]);
     topItems.forEach(it => {
-      rows.push([it.name, String(it.quantity), String(it.revenue), String(it.cost), String(it.revenue - it.cost)]);
+      rows.push([
+        txt(it.name),
+        num(it.quantity),
+        num(it.revenue),
+        num(it.cost),
+        num(it.revenue - it.cost),
+      ]);
     });
     rows.push([]);
-    rows.push(['VANT PA JOU']);
-    rows.push(['Dat', 'Total']);
-    dayPoints.forEach(p => rows.push([p.date, String(p.total)]));
+    rows.push([txt('VANT PA JOU')]);
+    rows.push([txt('Dat'), txt('Total')]);
+    dayPoints.forEach(p => rows.push([txt(p.date), num(p.total)]));
 
-    const csv = rows
-      .map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(','))
-      .join('\n');
+    // 'sep=;' di Excel ki separatè pou itilize (mache an FR ak an EN)
+    const csv = 'sep=;\n' + rows.map(r => r.join(';')).join('\n');
 
     // BOM pou aksan yo parèt byen nan Excel
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
