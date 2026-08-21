@@ -16,6 +16,29 @@ interface Product {
   barcode: string | null;
 }
 
+interface Adjustment {
+  id: string;
+  product_name: string;
+  quantity: number;
+  reason: string;
+  note: string | null;
+  total_cost: number;
+  created_at: string;
+}
+
+const REASONS = [
+  { value: 'lost', label: 'Pèdi' },
+  { value: 'damaged', label: 'Gate' },
+  { value: 'expired', label: 'Ekspire' },
+  { value: 'other', label: 'Lòt rezon' },
+];
+
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [currency, setCurrency] = useState('HTG');
@@ -33,6 +56,19 @@ export default function InventoryPage() {
 
   // Apèsi barcode (jenere / enprime etikèt)
   const barcodeSvgRef = useRef<SVGSVGElement>(null);
+
+  // Ajisteman stock (pèdi / gate / ekspire)
+  const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
+  const [adjustQty, setAdjustQty] = useState('');
+  const [adjustReason, setAdjustReason] = useState('lost');
+  const [adjustNote, setAdjustNote] = useState('');
+  const [adjustBusy, setAdjustBusy] = useState(false);
+  const [adjustErr, setAdjustErr] = useState('');
+
+  // Istorik pèt
+  const [showHistory, setShowHistory] = useState(false);
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: '', category: '', description: '',
@@ -238,6 +274,99 @@ export default function InventoryPage() {
     };
   }, [showScanner]);
 
+  // ===== Ajisteman stock (pèdi / gate / ekspire) =====
+  function openAdjust(p: Product) {
+    setAdjustProduct(p);
+    setAdjustQty('');
+    setAdjustReason('lost');
+    setAdjustNote('');
+    setAdjustErr('');
+  }
+  function closeAdjust() {
+    setAdjustProduct(null);
+  }
+
+  // Chaje istorik pèt yo
+  async function openHistory() {
+    setShowHistory(true);
+    setHistoryLoading(true);
+    const supabase = createClient();
+    const ctx = await getBusinessContext();
+    if (!ctx) { setHistoryLoading(false); return; }
+
+    const { data } = await supabase
+      .from('stock_adjustments')
+      .select('id, product_name, quantity, reason, note, total_cost, created_at')
+      .eq('business_id', ctx.businessId)
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    setAdjustments(data ?? []);
+    setHistoryLoading(false);
+  }
+
+  const adjustQtyNum = parseInt(adjustQty);
+  const adjustCost = adjustProduct && !isNaN(adjustQtyNum)
+    ? adjustProduct.purchase_price * adjustQtyNum
+    : 0;
+
+  async function saveAdjustment() {
+    if (!adjustProduct) return;
+    if (isNaN(adjustQtyNum) || adjustQtyNum <= 0) {
+      setAdjustErr('Antre yon kantite ki pi gran pase 0.');
+      return;
+    }
+    if (adjustQtyNum > adjustProduct.quantity) {
+      setAdjustErr(`Ou pa ka retire ${adjustQtyNum} — gen sèlman ${adjustProduct.quantity} an stock.`);
+      return;
+    }
+
+    setAdjustBusy(true);
+    setAdjustErr('');
+
+    const supabase = createClient();
+    const ctx = await getBusinessContext();
+    if (!ctx) { setAdjustBusy(false); return; }
+
+    // 1) Anrejistre tras la
+    const { error: adjErr } = await supabase.from('stock_adjustments').insert({
+      business_id: ctx.businessId,
+      product_id: adjustProduct.id,
+      product_name: adjustProduct.name,
+      quantity: adjustQtyNum,
+      reason: adjustReason,
+      note: adjustNote.trim() || null,
+      unit_cost: adjustProduct.purchase_price,
+      total_cost: adjustProduct.purchase_price * adjustQtyNum,
+      created_by: ctx.userId,
+    });
+
+    if (adjErr) {
+      setAdjustErr('Erè: ' + adjErr.message);
+      setAdjustBusy(false);
+      return;
+    }
+
+    // 2) Desann stock la
+    const { error: prodErr } = await supabase
+      .from('products')
+      .update({ quantity: adjustProduct.quantity - adjustQtyNum })
+      .eq('id', adjustProduct.id);
+
+    setAdjustBusy(false);
+
+    if (prodErr) {
+      setAdjustErr('Erè stock: ' + prodErr.message);
+      return;
+    }
+
+    const reasonLabel = REASONS.find(r => r.value === adjustReason)?.label ?? '';
+    setMsg(`${adjustQtyNum} ${adjustProduct.name} retire nan stock (${reasonLabel}).`);
+    setTimeout(() => setMsg(''), 4000);
+    setAdjustProduct(null);
+    load();
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) { setMsg('Non pwodwi obligatwa.'); return; }
@@ -292,12 +421,18 @@ export default function InventoryPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-wrap justify-between items-center gap-2">
         <h1 className="text-2xl font-semibold text-gray-900">Envantè</h1>
-        <button onClick={() => { resetForm(); setShowForm(!showForm); }}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
-          {showForm ? 'Fèmen' : '+ Nouvo pwodwi'}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={openHistory}
+            className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
+            📋 Istorik pèt
+          </button>
+          <button onClick={() => { resetForm(); setShowForm(!showForm); }}
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
+            {showForm ? 'Fèmen' : '+ Nouvo pwodwi'}
+          </button>
+        </div>
       </div>
 
       {msg && <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>}
@@ -410,7 +545,7 @@ export default function InventoryPage() {
       )}
 
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table className="w-full text-sm min-w-[700px]">
+        <table className="w-full text-sm min-w-[780px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
               <th className="px-4 py-3">Pwodwi</th>
@@ -467,6 +602,11 @@ export default function InventoryPage() {
                       className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200">
                       Modifye
                     </button>
+                    <button onClick={() => openAdjust(p)}
+                      disabled={p.quantity <= 0}
+                      className="px-3 py-1.5 bg-orange-100 text-orange-700 rounded-lg text-xs hover:bg-orange-200 disabled:opacity-40 disabled:cursor-not-allowed">
+                      📉 Retire
+                    </button>
                     <button onClick={() => handleDelete(p.id, p.name)}
                       className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200">
                       Efase
@@ -489,6 +629,162 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {/* ===== MODAL ISTORIK PÈT ===== */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => setShowHistory(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden"
+            onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-semibold text-gray-800">📋 Istorik pèt nan stock</h2>
+              <button onClick={() => setShowHistory(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto">
+              {historyLoading ? (
+                <div className="p-6 text-center text-gray-400 text-sm">Chajman...</div>
+              ) : adjustments.length === 0 ? (
+                <div className="p-6 text-center text-gray-400 text-sm">
+                  Pa gen okenn pèt anrejistre toujou.
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0">
+                    <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
+                      <th className="px-4 py-3">Dat</th>
+                      <th className="px-4 py-3">Pwodwi</th>
+                      <th className="px-4 py-3">Kantite</th>
+                      <th className="px-4 py-3">Rezon</th>
+                      <th className="px-4 py-3 text-right">Valè</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {adjustments.map(a => (
+                      <tr key={a.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.created_at)}</td>
+                        <td className="px-4 py-3">
+                          <div className="font-medium">{a.product_name}</div>
+                          {a.note && <div className="text-xs text-gray-400">{a.note}</div>}
+                        </td>
+                        <td className="px-4 py-3 text-gray-700">{a.quantity}</td>
+                        <td className="px-4 py-3">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
+                            {REASONS.find(r => r.value === a.reason)?.label ?? a.reason}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-red-700 whitespace-nowrap">
+                          {fmt(a.total_cost)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+           {!historyLoading && adjustments.length > 0 && (
+              <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between gap-2 text-sm">
+                <span className="text-gray-600">
+                  <strong className="text-gray-900">{adjustments.length}</strong> pèt anrejistre
+                </span>
+                <span className="text-gray-600">
+                  Total valè pèt: <strong className="text-red-700">
+                    {fmt(adjustments.reduce((s, a) => s + Number(a.total_cost || 0), 0))}
+                  </strong>
+                </span>
+              </div>
+            )}
+
+            <div className="p-4 border-t border-gray-100">
+              <button onClick={() => setShowHistory(false)}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">
+                Fèmen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL AJISTEMAN STOCK ===== */}
+      {adjustProduct && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => !adjustBusy && closeAdjust()}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Retire nan stock</h2>
+            <p className="text-sm text-gray-500 mb-4">
+              {adjustProduct.name} — <strong>{adjustProduct.quantity}</strong> an stock kounye a.
+            </p>
+
+            <label className="text-sm text-gray-600 font-medium">Kantite pou retire</label>
+            <input
+              type="number"
+              autoFocus
+              placeholder="0"
+              value={adjustQty}
+              onChange={e => setAdjustQty(e.target.value)}
+              className="w-full mt-1 mb-3 px-4 py-3 border border-gray-200 rounded-lg text-lg font-semibold text-right focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+
+            <label className="text-sm text-gray-600 font-medium">Rezon</label>
+            <div className="grid grid-cols-2 gap-2 mt-1 mb-3">
+              {REASONS.map(r => (
+                <button
+                  key={r.value}
+                  type="button"
+                  onClick={() => setAdjustReason(r.value)}
+                  className={`py-2 rounded-lg text-sm font-medium border transition-colors ${
+                    adjustReason === r.value
+                      ? 'bg-orange-600 text-white border-orange-600'
+                      : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="text-sm text-gray-600 font-medium">Nòt (opsyonèl)</label>
+            <input
+              type="text"
+              placeholder="Ex: dat ekspirasyon pase"
+              value={adjustNote}
+              onChange={e => setAdjustNote(e.target.value)}
+              className="w-full mt-1 mb-3 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+            />
+
+            {/* Valè pèt la */}
+            {!isNaN(adjustQtyNum) && adjustQtyNum > 0 && (
+              <div className="flex justify-between items-center bg-red-50 rounded-lg px-4 py-2.5 mb-3">
+                <span className="text-sm text-red-700 font-medium">Valè pèt la</span>
+                <span className="text-lg font-bold text-red-800">{fmt(adjustCost)}</span>
+              </div>
+            )}
+
+            {adjustErr && (
+              <div className="mb-3 text-sm rounded-lg p-2 bg-red-50 text-red-700">{adjustErr}</div>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={closeAdjust}
+                disabled={adjustBusy}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50"
+              >
+                Anile
+              </button>
+              <button
+                onClick={saveAdjustment}
+                disabled={adjustBusy || isNaN(adjustQtyNum) || adjustQtyNum <= 0}
+                className="flex-1 py-3 bg-orange-600 text-white rounded-lg font-medium hover:bg-orange-700 disabled:opacity-40"
+              >
+                {adjustBusy ? 'Ap retire...' : 'Retire nan stock'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ===== MODAL KAMERA ===== */}
       {showScanner && (

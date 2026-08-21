@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
@@ -82,9 +83,12 @@ function fmtDateTime(iso: string): string {
 }
 
 export default function PosPage() {
+  const router = useRouter();
+
   const [products, setProducts] = useState<Product[]>([]);
   const [biz, setBiz] = useState<BizInfo | null>(null);
   const [currency, setCurrency] = useState('HTG');
+  const [role, setRole] = useState(''); // 'owner' | 'cashier'
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -123,6 +127,22 @@ export default function PosPage() {
   // Resi
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
+  const isCashier = role === 'cashier';
+
+  // Fèmen modal ouvèti san ouvri kès la
+  function cancelOpenSession() {
+    setShowOpenModal(false);
+    setOpeningInput('');
+    setMsg('');
+  }
+
+  // Kesye a pa gen lòt paj — si li pa vle ouvri kès, li dekonekte
+  async function signOutFromPos() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+  }
+
   useEffect(() => { load(); }, []);
 
   async function load() {
@@ -130,6 +150,8 @@ export default function PosPage() {
     const supabase = createClient();
     const ctx = await getBusinessContext();
     if (!ctx) { setLoading(false); return; }
+
+    setRole(ctx.role);
 
     const { data: business } = await supabase
       .from('businesses')
@@ -556,10 +578,15 @@ export default function PosPage() {
         <div className="mb-3">
           <div className="flex justify-between items-center mb-2">
             <h1 className="text-xl font-semibold text-gray-900">Sistèm Vant</h1>
-            {session && (
+            {session ? (
               <button onClick={openCloseModal}
                 className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-200 whitespace-nowrap">
                 🔒 Fèmen Kès
+              </button>
+            ) : (
+              <button onClick={() => setShowOpenModal(true)}
+                className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-medium hover:bg-emerald-200 whitespace-nowrap">
+                🔓 Ouvri Kès
               </button>
             )}
           </div>
@@ -571,9 +598,19 @@ export default function PosPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 Kès louvri
               </span>
-              <span className="text-emerald-800">
-                Kach jounen an: <strong>{fmt(sessionCashSales)}</strong>
-              </span>
+              {/* Kesye pa wè total kach la an dirèk (konptaj avèg) */}
+              {!isCashier && (
+                <span className="text-emerald-800">
+                  Kach jounen an: <strong>{fmt(sessionCashSales)}</strong>
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Avètisman: pa gen kès louvri */}
+          {!session && (
+            <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
+              Kès la pa louvri. Ouvri kès la anvan ou fè yon vant.
             </div>
           )}
 
@@ -721,7 +758,7 @@ export default function PosPage() {
         </div>
       </div>
 
-      {/* ===== MODAL OUVÈTI KÈS (bloke ekran an) ===== */}
+      {/* ===== MODAL OUVÈTI KÈS ===== */}
       {showOpenModal && (
         <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6">
@@ -751,6 +788,25 @@ export default function PosPage() {
             >
               {openingBusy ? 'Ap ouvri...' : 'Ouvri kès la'}
             </button>
+
+            {/* Sòti san ouvri kès la */}
+            {isCashier ? (
+              <button
+                onClick={signOutFromPos}
+                disabled={openingBusy}
+                className="w-full mt-2 py-2.5 text-sm text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              >
+                Dekoneksyon
+              </button>
+            ) : (
+              <button
+                onClick={cancelOpenSession}
+                disabled={openingBusy}
+                className="w-full mt-2 py-2.5 text-sm text-gray-500 hover:text-gray-800 disabled:opacity-50"
+              >
+                Anile — m pa vle ouvri kès la kounye a
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -860,16 +916,26 @@ export default function PosPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Fèmen Kès</h2>
 
-            <div className="space-y-2 text-sm bg-gray-50 rounded-xl p-4 mb-4">
-              <div className="flex justify-between">
-                <span className="text-gray-500">Fon de kès</span>
-                <span className="font-medium">{fmt(session.opening_amount)}</span>
+            {/* Rezime chif yo — SÈLMAN pou mèt (konptaj avèg pou kesye) */}
+            {!isCashier && (
+              <div className="space-y-2 text-sm bg-gray-50 rounded-xl p-4 mb-4">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Fon de kès</span>
+                  <span className="font-medium">{fmt(session.opening_amount)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Total vant cash</span>
+                  <span className="font-medium">{fmt(sessionCashSales)}</span>
+                </div>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">Total vant cash</span>
-                <span className="font-medium">{fmt(sessionCashSales)}</span>
+            )}
+
+            {/* Enstriksyon pou kesye (konptaj avèg) */}
+            {isCashier && (
+              <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4 text-sm text-indigo-800">
+                Konte tout kòb ki nan kès la epi tape total la anba. Sistèm nan ap fè rès kalkil la.
               </div>
-            </div>
+            )}
 
             <label className="text-sm text-gray-600 font-medium">Sòti espès (opsyonèl)</label>
             <input
@@ -881,10 +947,13 @@ export default function PosPage() {
             />
             <p className="text-xs text-gray-400 mb-3">Kòb ou retire nan kès la pandan jounen an (depans, monnen, elatriye).</p>
 
-            <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2.5 mb-4">
-              <span className="text-sm text-blue-700 font-medium">Total dwe genyen</span>
-              <span className="text-lg font-bold text-blue-800">{fmt(closeExpected)}</span>
-            </div>
+            {/* Total dwe genyen — SÈLMAN pou mèt */}
+            {!isCashier && (
+              <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2.5 mb-4">
+                <span className="text-sm text-blue-700 font-medium">Total dwe genyen</span>
+                <span className="text-lg font-bold text-blue-800">{fmt(closeExpected)}</span>
+              </div>
+            )}
 
             <label className="text-sm text-gray-600 font-medium">Kòb ou konte nan kès la</label>
             <input
@@ -896,8 +965,9 @@ export default function PosPage() {
               className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg text-lg font-semibold text-right focus:outline-none focus:ring-2 focus:ring-green-500"
             />
 
-            {!isNaN(closeCounted) && (
-              <div className={`flex justify-between items-center mt-3 px-1`}>
+            {/* Diferans an dirèk — SÈLMAN pou mèt (kesye wè l nan Rapò Z apre fèmti) */}
+            {!isCashier && !isNaN(closeCounted) && (
+              <div className="flex justify-between items-center mt-3 px-1">
                 <span className="text-gray-600">Diferans</span>
                 <span className={`text-xl font-bold ${
                   closeEcart === 0 ? 'text-green-600' : closeEcart < 0 ? 'text-red-600' : 'text-amber-600'
