@@ -27,6 +27,12 @@ export default function AdminDashboard() {
   const [msg, setMsg] = useState('');
   const [processing, setProcessing] = useState<string | null>(null);
 
+  // Efase biznis
+  const [deleteTarget, setDeleteTarget] = useState<Business | null>(null);
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState('');
+
   useEffect(() => { load(); }, []);
 
   async function load() {
@@ -86,6 +92,40 @@ export default function AdminDashboard() {
     if (res.ok) { setMsg(data.message); load(); }
     else { setMsg('Erè: ' + (data.error ?? 'pa ka revoke')); }
     setProcessing(null);
+  }
+
+  // ===== Efase biznis =====
+  function openDelete(b: Business) {
+    setDeleteTarget(b);
+    setConfirmName('');
+    setDeleteErr('');
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteErr('');
+
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setDeleting(false); return; }
+
+    const res = await fetch('/api/admin/delete-business', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ businessId: deleteTarget.id, confirmName }),
+    });
+    const data = await res.json();
+    setDeleting(false);
+
+    if (res.ok) {
+      setMsg(data.message);
+      setDeleteTarget(null);
+      setConfirmName('');
+      load();
+    } else {
+      setDeleteErr(data.error ?? 'Pa ka efase.');
+    }
   }
 
   async function generate() {
@@ -201,7 +241,7 @@ export default function AdminDashboard() {
       )}
 
       <div className="bg-white rounded-xl border overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
+        <table className="w-full text-sm min-w-[680px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
               <th className="px-4 py-3">Biznis</th>
@@ -246,6 +286,12 @@ export default function AdminDashboard() {
                         {processing === b.id ? '...' : 'Revoke'}
                       </button>
                     )}
+                    {!b.is_admin && (
+                      <button onClick={() => openDelete(b)}
+                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 whitespace-nowrap">
+                        🗑️ Efase
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -253,6 +299,65 @@ export default function AdminDashboard() {
           </tbody>
         </table>
       </div>
+
+      {/* ===== MODAL EFASE BIZNIS ===== */}
+      {deleteTarget && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4"
+          onClick={() => !deleting && setDeleteTarget(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+            <h2 className="text-lg font-semibold text-red-700 mb-2">⚠️ Efase biznis nèt</h2>
+
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-800 space-y-2">
+              <p className="font-medium">Aksyon sa a pa gen retou.</p>
+              <p>Tout done <strong>{deleteTarget.business_name}</strong> ap efase nèt nan sèvè a:</p>
+              <ul className="list-disc list-inside text-xs space-y-0.5">
+                <li>Tout pwodwi ak foto yo</li>
+                <li>Tout fakti, vant, ak peman</li>
+                <li>Tout kliyan ak dèt</li>
+                <li>Tout depans ak envestisman</li>
+                <li>Tout sesyon kès ak rapò Z</li>
+                <li>Tout kont itilizatè (mèt ak kesye)</li>
+              </ul>
+            </div>
+
+            <label className="text-sm text-gray-600 font-medium">
+              Pou konfime, tape non biznis lan egzakteman:
+            </label>
+            <p className="text-sm font-mono bg-gray-100 rounded px-3 py-2 my-2 select-all">
+              {deleteTarget.business_name}
+            </p>
+            <input
+              type="text"
+              autoFocus
+              placeholder="Tape non an isit la"
+              value={confirmName}
+              onChange={e => setConfirmName(e.target.value)}
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+            />
+
+            {deleteErr && (
+              <div className="mt-3 text-sm rounded-lg p-2 bg-red-50 text-red-700">{deleteErr}</div>
+            )}
+
+            <div className="flex gap-2 mt-6">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50"
+              >
+                Anile
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting || confirmName !== deleteTarget.business_name}
+                className="flex-1 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {deleting ? 'Ap efase...' : 'Efase nèt'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selected && (
         <div style={{ minHeight: '400px', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px' }}>

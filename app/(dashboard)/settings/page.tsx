@@ -4,6 +4,17 @@ import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { getLicenseInfo } from '@/lib/license';
 
+const DELETE_REASONS = [
+  { value: 'too_expensive', label: 'Pri lisans lan twò chè pou mwen' },
+  { value: 'not_using', label: 'M pa itilize app la ase' },
+  { value: 'too_complicated', label: 'App la twò konplike pou mwen' },
+  { value: 'missing_features', label: 'App la pa gen sa m bezwen an' },
+  { value: 'found_alternative', label: 'M jwenn yon lòt app ki pi bon pou mwen' },
+  { value: 'business_closed', label: 'M fèmen oswa m sispann biznis la' },
+  { value: 'technical_issues', label: 'M gen twòp pwoblèm teknik ak app la' },
+  { value: 'other', label: 'Lòt rezon' },
+];
+
 export default function SettingsPage() {
   const [business, setBusiness] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +32,15 @@ export default function SettingsPage() {
   const [code, setCode] = useState('');
   const [activating, setActivating] = useState(false);
   const [activateMsg, setActivateMsg] = useState('');
+
+  // Efase kont
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+  const [reason, setReason] = useState('');
+  const [otherNote, setOtherNote] = useState('');
+  const [confirmName, setConfirmName] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteErr, setDeleteErr] = useState('');
 
   useEffect(() => { load(); }, []);
 
@@ -120,6 +140,54 @@ export default function SettingsPage() {
       setActivateMsg('Erè: ' + (data.error ?? 'Kòd envalid'));
     }
     setActivating(false);
+  }
+
+  // ===== Efase kont =====
+  function openDelete() {
+    setShowDelete(true);
+    setDeleteStep(1);
+    setReason('');
+    setOtherNote('');
+    setConfirmName('');
+    setDeleteErr('');
+  }
+
+  function closeDelete() {
+    if (deleting) return;
+    setShowDelete(false);
+  }
+
+  const canGoStep2 =
+    reason !== '' && (reason !== 'other' || otherNote.trim().length >= 3);
+
+  async function confirmDelete() {
+    setDeleting(true);
+    setDeleteErr('');
+
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setDeleting(false); return; }
+
+    const res = await fetch('/api/account/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({
+        reason,
+        note: otherNote,
+        confirmName,
+      }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      // Kont lan efase — dekonekte epi voye l sou paj konekte a
+      await supabase.auth.signOut();
+      window.location.href = '/login';
+      return;
+    }
+
+    setDeleting(false);
+    setDeleteErr(data.error ?? 'Pa ka efase kont lan.');
   }
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
@@ -279,6 +347,155 @@ export default function SettingsPage() {
           </a>
         </div>
       </div>
+
+      {/* ZÒN DANJE — EFASE KONT */}
+      {!business?.is_admin && (
+        <div className="bg-white rounded-xl border border-red-200 p-5">
+          <h2 className="font-medium text-red-700">Zòn danje</h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Si ou pa vle kontinye itilize BizManager, ou ka efase kont ou ak tout done biznis ou nèt.
+            Aksyon sa a pa gen retou.
+          </p>
+          <button onClick={openDelete}
+            className="mt-3 px-4 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm font-medium hover:bg-red-100">
+            🗑️ Efase kont mwen
+          </button>
+        </div>
+      )}
+
+      {/* ===== MODAL EFASE KONT ===== */}
+      {showDelete && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={closeDelete}>
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 my-4" onClick={e => e.stopPropagation()}>
+
+            {deleteStep === 1 ? (
+              <>
+                <h2 className="text-lg font-semibold text-gray-900 mb-1">Nou regrèt wè w ale</h2>
+                <p className="text-sm text-gray-500 mb-4">
+                  Anvan ou ale, di nou poukisa. Repons ou ap ede nou amelyore BizManager pou lòt biznis ayisyen yo.
+                </p>
+
+                <div className="space-y-2 mb-3">
+                  {DELETE_REASONS.map(r => (
+                    <button
+                      key={r.value}
+                      type="button"
+                      onClick={() => setReason(r.value)}
+                      className={`w-full text-left px-4 py-2.5 rounded-lg text-sm border transition-colors ${
+                        reason === r.value
+                          ? 'bg-blue-50 text-blue-800 border-blue-300 font-medium'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      {reason === r.value ? '● ' : '○ '}{r.label}
+                    </button>
+                  ))}
+                </div>
+
+                {reason === 'other' && (
+                  <div className="mb-3">
+                    <label className="text-sm text-gray-600 font-medium">Eksplike rezon ou</label>
+                    <textarea
+                      autoFocus
+                      rows={3}
+                      placeholder="Ekri rezon ou isit la..."
+                      value={otherNote}
+                      onChange={e => setOtherNote(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                {reason !== '' && reason !== 'other' && (
+                  <div className="mb-3">
+                    <label className="text-sm text-gray-600 font-medium">
+                      Yon ti detay anplis (opsyonèl)
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="Sa ka ede nou amelyore..."
+                      value={otherNote}
+                      onChange={e => setOtherNote(e.target.value)}
+                      className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-5">
+                  <button onClick={closeDelete}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200">
+                    Anile
+                  </button>
+                  <button
+                    onClick={() => setDeleteStep(2)}
+                    disabled={!canGoStep2}
+                    className="flex-1 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Kontinye
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold text-red-700 mb-2">⚠️ Konfime efasman an</h2>
+
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4 text-sm text-red-800 space-y-2">
+                  <p className="font-medium">Aksyon sa a pa gen retou.</p>
+                  <p>Tout done <strong>{business?.business_name}</strong> ap efase nèt nan sèvè a:</p>
+                  <ul className="list-disc list-inside text-xs space-y-0.5">
+                    <li>Tout pwodwi ak foto yo</li>
+                    <li>Tout fakti, vant, ak peman</li>
+                    <li>Tout kliyan ak dèt</li>
+                    <li>Tout depans ak envestisman</li>
+                    <li>Tout sesyon kès ak rapò Z</li>
+                    <li>Kont ou ak kont tout kesye yo</li>
+                  </ul>
+                  <p className="text-xs pt-1">
+                    Si ou gen yon lisans aktif, ou <strong>p ap</strong> jwenn ranbousman.
+                  </p>
+                </div>
+
+                <label className="text-sm text-gray-600 font-medium">
+                  Pou konfime, tape non biznis ou egzakteman:
+                </label>
+                <p className="text-sm font-mono bg-gray-100 rounded px-3 py-2 my-2 select-all">
+                  {business?.business_name}
+                </p>
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Tape non an isit la"
+                  value={confirmName}
+                  onChange={e => setConfirmName(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"
+                />
+
+                {deleteErr && (
+                  <div className="mt-3 text-sm rounded-lg p-2 bg-red-50 text-red-700">{deleteErr}</div>
+                )}
+
+                <div className="flex gap-2 mt-6">
+                  <button
+                    onClick={() => setDeleteStep(1)}
+                    disabled={deleting}
+                    className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 disabled:opacity-50"
+                  >
+                    ← Retounen
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    disabled={deleting || confirmName !== business?.business_name}
+                    className="flex-1 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deleting ? 'Ap efase...' : 'Efase nèt'}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
