@@ -4,6 +4,14 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
+import {
+  saveCache, readCache, cacheAge, formatCacheAge,
+  saveLastBusinessId, readLastBusinessId,
+  withTimeout, isOnline,
+  addToQueue, queueCount, nextTempNumber, makeLocalId,
+  applyQueueToProducts, readQueue, removeFromQueue, markQueueError,
+  type QueuedSale,
+} from '@/lib/offline';
 
 interface Product {
   id: string;
@@ -28,6 +36,7 @@ interface BizInfo {
   city?: string;
   department?: string;
   phone?: string;
+  currency?: string;
 }
 
 interface Receipt {
@@ -48,7 +57,6 @@ interface Session {
   opened_at: string;
 }
 
-// Rezime fèmti kès (Rapò Z)
 interface ZReport {
   openingAmount: number;
   totalCashSales: number;
@@ -61,21 +69,18 @@ interface ZReport {
   cashierName: string;
 }
 
-// Dat jodi a nan lè LOKAL la (Ayiti), pa an UTC
 function todayLocalDate(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Dat + lè pou resi a (fòma lokal)
 function nowDateTime(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Fòma yon timestamp ISO an dat+lè lokal
 function fmtDateTime(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -88,14 +93,22 @@ export default function PosPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [biz, setBiz] = useState<BizInfo | null>(null);
   const [currency, setCurrency] = useState('HTG');
-  const [role, setRole] = useState(''); // 'owner' | 'cashier'
+  const [role, setRole] = useState('');
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<CartItem[]>([]);
 
+  // ===== Offline =====
+  const [offline, setOffline] = useState(false);
+  const [dataAge, setDataAge] = useState<number | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
+
   // ===== Kès =====
   const [session, setSession] = useState<Session | null>(null);
-  const [sessionCashSales, setSessionCashSales] = useState(0); // total kach kès la (kalkile an dirèk)
+  const [sessionCashSales, setSessionCashSales] = useState(0);
   const [showOpenModal, setShowOpenModal] = useState(false);
   const [openingInput, setOpeningInput] = useState('');
   const [openingBusy, setOpeningBusy] = useState(false);
@@ -106,12 +119,12 @@ export default function PosPage() {
   const [closingBusy, setClosingBusy] = useState(false);
   const [zReport, setZReport] = useState<ZReport | null>(null);
 
-  // Eskane barcode (tape / eskanè USB)
+  // Eskane barcode
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanMsg, setScanMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  // Eskane ak kamera
+  // Kamera
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState('');
   const scannerRef = useRef<any>(null);
@@ -124,19 +137,16 @@ export default function PosPage() {
   const [processing, setProcessing] = useState(false);
   const [msg, setMsg] = useState('');
 
-  // Resi
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
   const isCashier = role === 'cashier';
 
-  // Fèmen modal ouvèti san ouvri kès la
   function cancelOpenSession() {
     setShowOpenModal(false);
     setOpeningInput('');
     setMsg('');
   }
 
-  // Kesye a pa gen lòt paj — si li pa vle ouvri kès, li dekonekte
   async function signOutFromPos() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -145,78 +155,289 @@ export default function PosPage() {
 
   useEffect(() => { load(); }, []);
 
+  // Reyaji lè rezo a tounen oswa mouri
+  useEffect(() => {
+    function onOnline() { load(); }
+    function onOffline() { setOffline(true); }
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
   async function load() {
     setLoading(true);
+
     const supabase = createClient();
-    const ctx = await getBusinessContext();
-    if (!ctx) { setLoading(false); return; }
 
-    setRole(ctx.role);
+    // Eseye jwenn kontèks la (li bezwen rezo). Si li echwe, n ap
+    // sèvi ak dènye businessId nou te sove a.
+    const ctx = await withTimeout(getBusinessContext());
+    const bid = ctx?.businessId ?? readLastBusinessId();
 
-    const { data: business } = await supabase
-      .from('businesses')
-      .select('business_name, street, city, department, phone, currency')
-      .eq('id', ctx.businessId)
-      .single();
-    setBiz(business);
-    setCurrency(business?.currency ?? 'HTG');
-
-    const { data } = await supabase
-      .from('products')
-      .select('id, name, sale_price, quantity, image_url, barcode')
-      .eq('business_id', ctx.businessId)
-      .order('name');
-    setProducts(data ?? []);
-
-    // Chaje kès ki louvri a (si genyen)
-    await loadSession(ctx.businessId);
-
-    setLoading(false);
-  }
-
-  // Chaje kès OPEN la epi kalkile total kach li an dirèk depi payments
-  async function loadSession(businessId: string) {
-    const supabase = createClient();
-    const { data: sess } = await supabase
-      .from('cash_sessions')
-      .select('id, opening_amount, cash_out, currency, opened_at')
-      .eq('business_id', businessId)
-      .eq('status', 'OPEN')
-      .maybeSingle();
-
-    if (!sess) {
-      setSession(null);
-      setSessionCashSales(0);
-      setShowOpenModal(true); // pa gen kès → mande ouvèti
+    if (!bid) {
+      setOffline(true);
+      setLoading(false);
       return;
     }
 
-    setSession(sess);
-    setShowOpenModal(false);
-    await refreshCashSales(sess.id);
+    setBusinessId(bid);
+    if (ctx) {
+      saveLastBusinessId(bid);
+      setRole(ctx.role);
+      saveCache('role', bid, ctx.role);
+      saveCache('user_id', bid, ctx.userId);
+      saveCache('cashier_name', bid, ctx.fullName || 'Itilizatè');
+    } else {
+      const cachedRole = readCache<string>('role', bid);
+      if (cachedRole) setRole(cachedRole);
+    }
+
+    // ---- Enfo biznis ----
+    const bizRes = await withTimeout(
+      supabase
+        .from('businesses')
+        .select('business_name, street, city, department, phone, currency')
+        .eq('id', bid)
+        .single()
+    );
+
+    let isOff = !isOnline();
+
+    if (bizRes && (bizRes as any).data) {
+      const business = (bizRes as any).data as BizInfo;
+      setBiz(business);
+      setCurrency(business.currency ?? 'HTG');
+      saveCache('biz', bid, business);
+    } else {
+      isOff = true;
+      const cachedBiz = readCache<BizInfo>('biz', bid);
+      if (cachedBiz) {
+        setBiz(cachedBiz);
+        setCurrency(cachedBiz.currency ?? 'HTG');
+      }
+    }
+
+    // ---- Pwodwi ----
+    // Kachèt la kenbe stock SÈVÈ a. Sa nou afiche = kachèt mwens fil datant.
+    const prodRes = await withTimeout(
+      supabase
+        .from('products')
+        .select('id, name, sale_price, quantity, image_url, barcode')
+        .eq('business_id', bid)
+        .order('name')
+    );
+
+    if (prodRes && (prodRes as any).data) {
+      const list = (prodRes as any).data as Product[];
+      saveCache('products', bid, list);
+      setProducts(applyQueueToProducts(list, bid));
+      setDataAge(0);
+    } else {
+      isOff = true;
+      const cachedProducts = readCache<Product[]>('products', bid) ?? [];
+      setProducts(applyQueueToProducts(cachedProducts, bid));
+      setDataAge(cacheAge('products', bid));
+    }
+
+    // ---- Sesyon kès ----
+    const sessRes = await withTimeout(
+      supabase
+        .from('cash_sessions')
+        .select('id, opening_amount, cash_out, currency, opened_at')
+        .eq('business_id', bid)
+        .eq('status', 'OPEN')
+        .maybeSingle()
+    );
+
+    let activeSession: Session | null = null;
+
+    if (sessRes !== null) {
+      const sess = (sessRes as any).data as Session | null;
+      if (sess) {
+        activeSession = sess;
+        setSession(sess);
+        saveCache('session', bid, sess);
+        setShowOpenModal(false);
+        await refreshCashSales(sess.id);
+      } else {
+        setSession(null);
+        saveCache('session', bid, null);
+        setSessionCashSales(0);
+        setShowOpenModal(true);
+      }
+    } else {
+      isOff = true;
+      const cachedSession = readCache<Session | null>('session', bid);
+      activeSession = cachedSession ?? null;
+      setSession(cachedSession ?? null);
+      if (!cachedSession) setShowOpenModal(true);
+    }
+
+    setPendingCount(queueCount(bid));
+    setOffline(isOff);
+    setLoading(false);
+
+    // Si nou an liy epi gen vant nan fil, sinkronize otomatikman
+    if (!isOff && queueCount(bid) > 0 && !syncing) {
+      const res = await syncQueue(bid);
+      if (res.ok > 0) {
+        setSyncMsg(`✓ ${res.ok} vant voye sou sèvè a.`);
+        setTimeout(() => setSyncMsg(''), 5000);
+        // Rechaje pwodwi yo ak stock sèvè a ajou
+        const fresh = await withTimeout(
+          supabase
+            .from('products')
+            .select('id, name, sale_price, quantity, image_url, barcode')
+            .eq('business_id', bid)
+            .order('name')
+        );
+        if (fresh && (fresh as any).data) {
+          const list = (fresh as any).data as Product[];
+          saveCache('products', bid, list);
+          setProducts(applyQueueToProducts(list, bid));
+        }
+        if (activeSession) await refreshCashSales(activeSession.id);
+      }
+      if (res.failed > 0) {
+        setSyncMsg(`${res.failed} vant pa t ka voye. N ap eseye ankò.`);
+      }
+    }
   }
 
-  // Kalkile total vant CASH pou yon sesyon (sous verite = payments)
   async function refreshCashSales(sessionId: string) {
     const supabase = createClient();
-    const { data: pays } = await supabase
-      .from('payments')
-      .select('amount')
-      .eq('session_id', sessionId)
-      .eq('method', 'cash');
-    const total = (pays ?? []).reduce((s, p: any) => s + Number(p.amount || 0), 0);
-    setSessionCashSales(total);
+    const res = await withTimeout(
+      supabase
+        .from('payments')
+        .select('amount')
+        .eq('session_id', sessionId)
+        .eq('method', 'cash')
+    );
+    if (res && (res as any).data) {
+      const total = ((res as any).data as any[]).reduce(
+        (s, p) => s + Number(p.amount || 0), 0
+      );
+      setSessionCashSales(total);
+    }
   }
 
-  // Ouvri kès la
+  // ===== Sinkronize vant offline yo =====
+  async function syncQueue(bid: string): Promise<{ ok: number; failed: number }> {
+    const queue = readQueue(bid);
+    if (queue.length === 0) return { ok: 0, failed: 0 };
+
+    setSyncing(true);
+    const supabase = createClient();
+    let ok = 0;
+    let failed = 0;
+
+    for (const sale of queue) {
+      try {
+        // 1) Kreye fakti a
+        const { data: inserted, error: invErr } = await supabase
+          .from('invoices')
+          .insert({
+            business_id: sale.business_id,
+            client_id: null,
+            niche_template: 'retail',
+            issue_date: sale.issue_date,
+            subtotal: sale.total,
+            tax_rate: 0,
+            tax_amount: 0,
+            total_amount: sale.total,
+            amount_paid: sale.total,
+            currency: sale.currency,
+            status: 'paid',
+            source: 'pos',
+            created_by: sale.user_id || null,
+            session_id: sale.session_id,
+            metadata: {
+              items: sale.items,
+              discount: 0,
+              cash_given: sale.cash_given,
+              change: sale.change,
+              offline: true,
+              temp_number: sale.temp_number,
+              sold_at: sale.created_at,
+            },
+          })
+          .select('id')
+          .single();
+
+        if (invErr || !inserted) {
+          markQueueError(bid, sale.local_id, invErr?.message ?? 'fakti echwe');
+          failed++;
+          continue;
+        }
+
+        // 2) Peman an
+        await supabase.from('payments').insert({
+          invoice_id: inserted.id,
+          business_id: sale.business_id,
+          amount: sale.total,
+          method: 'cash',
+          session_id: sale.session_id,
+        });
+
+        // 3) Desann stock sou sèvè a
+        for (const it of sale.items) {
+          const { data: prod } = await supabase
+            .from('products')
+            .select('quantity')
+            .eq('id', it.product_id)
+            .single();
+          if (prod) {
+            await supabase
+              .from('products')
+              .update({ quantity: Math.max(0, Number(prod.quantity) - it.quantity) })
+              .eq('id', it.product_id);
+          }
+        }
+
+        // 4) Retire l nan fil la — sèlman lè tout bagay pase
+        removeFromQueue(bid, sale.local_id);
+        ok++;
+      } catch (e: any) {
+        markQueueError(bid, sale.local_id, e?.message ?? 'erè enkoni');
+        failed++;
+      }
+    }
+
+    setSyncing(false);
+    setPendingCount(queueCount(bid));
+    return { ok, failed };
+  }
+
+  // Sinkronize epi rechaje done yo
+  async function syncNow() {
+    if (!businessId || syncing) return;
+    setSyncMsg('');
+    const res = await syncQueue(businessId);
+    if (res.ok > 0) {
+      setSyncMsg(`✓ ${res.ok} vant voye sou sèvè a.`);
+      setTimeout(() => setSyncMsg(''), 5000);
+    }
+    if (res.failed > 0) {
+      setSyncMsg(`${res.failed} vant pa t ka voye. N ap eseye ankò.`);
+    }
+    await load();
+  }
+
   async function openSession() {
+    if (offline) {
+      setMsg('Ou pa ka ouvri kès la san entènèt. Konekte ou an premye.');
+      return;
+    }
     const amount = parseFloat(openingInput);
     if (isNaN(amount) || amount < 0) { setMsg('Antre yon fon de kès valab.'); return; }
     setOpeningBusy(true);
 
     const supabase = createClient();
     const ctx = await getBusinessContext();
-    if (!ctx) { setOpeningBusy(false); return; }
+    if (!ctx) { setOpeningBusy(false); setMsg('Pa gen koneksyon.'); return; }
 
     const { data, error } = await supabase.from('cash_sessions').insert({
       business_id: ctx.businessId,
@@ -230,6 +451,7 @@ export default function PosPage() {
     if (error) { setMsg('Erè ouvèti kès: ' + error.message); return; }
 
     setSession(data);
+    saveCache('session', ctx.businessId, data);
     setSessionCashSales(0);
     setShowOpenModal(false);
     setOpeningInput('');
@@ -260,7 +482,6 @@ export default function PosPage() {
     });
   }
 
-  // Lojik pataje: tape, eskanè USB, ak kamera tout pase la
   function processBarcode(code: string) {
     const trimmed = code.trim();
     if (!trimmed) return;
@@ -393,22 +614,75 @@ export default function PosPage() {
       return;
     }
     if (!session) { setMsg('Pa gen kès louvri.'); return; }
+
+    const saleItems = cart.map(it => ({
+      product_id: it.product_id,
+      name: it.name,
+      quantity: it.quantity,
+      unit_price: it.unit_price,
+      total: it.unit_price * it.quantity,
+    }));
+
+    // ===== VANT OFFLINE =====
+    if (offline) {
+      if (!businessId) { setMsg('Pa gen done biznis lokal.'); return; }
+
+      const tempNumber = nextTempNumber(businessId);
+      const nowIso = new Date().toISOString();
+
+      const queued: QueuedSale = {
+        local_id: makeLocalId(),
+        business_id: businessId,
+        session_id: session.id,
+        user_id: readCache<string>('user_id', businessId) ?? '',
+        cashier_name: readCache<string>('cashier_name', businessId) ?? 'Itilizatè',
+        issue_date: todayLocalDate(),
+        created_at: nowIso,
+        currency: currency,
+        items: saleItems,
+        total: total,
+        cash_given: cashNum,
+        change: change,
+        temp_number: tempNumber,
+      };
+
+      addToQueue(businessId, queued);
+      setPendingCount(queueCount(businessId));
+
+      // Rekalkile stock la depi kachèt la mwens fil datant lan
+      // (kachèt la pa touche — li kenbe stock sèvè a)
+      const pristine = readCache<Product[]>('products', businessId) ?? products;
+      setProducts(applyQueueToProducts(pristine, businessId));
+
+      setReceipt({
+        invoiceNumber: tempNumber,
+        dateTime: nowDateTime(),
+        cashierName: queued.cashier_name,
+        items: saleItems.map(it => ({
+          name: it.name, quantity: it.quantity,
+          unit_price: it.unit_price, total: it.total,
+        })),
+        total,
+        cashGiven: cashNum,
+        change,
+      });
+
+      setShowPayment(false);
+      setCart([]);
+      setCashGiven('');
+      setScanMsg(null);
+      setTimeout(() => barcodeRef.current?.focus(), 0);
+      return;
+    }
+
+    // ===== VANT AN LIY =====
     setProcessing(true);
     setMsg('');
 
     const supabase = createClient();
     const ctx = await getBusinessContext();
-    if (!ctx) { setProcessing(false); return; }
+    if (!ctx) { setProcessing(false); setMsg('Pa gen koneksyon.'); return; }
 
-    const saleItems = cart.map(it => ({
-      name: it.name,
-      quantity: it.quantity,
-      unit_price: it.unit_price,
-      total: it.unit_price * it.quantity,
-      product_id: it.product_id,
-    }));
-
-    // 1) Kreye fakti a (vant POS, peye konplè) — make ak sesyon an
     const { data: inserted, error } = await supabase.from('invoices').insert({
       business_id: ctx.businessId,
       client_id: null,
@@ -438,7 +712,6 @@ export default function PosPage() {
       return;
     }
 
-    // 2) Anrejistre peman an — make ak sesyon an
     await supabase.from('payments').insert({
       invoice_id: inserted.id,
       business_id: ctx.businessId,
@@ -447,7 +720,6 @@ export default function PosPage() {
       session_id: session.id,
     });
 
-    // 3) Desann stock
     for (const it of cart) {
       const prod = products.find(p => p.id === it.product_id);
       if (prod) {
@@ -458,18 +730,19 @@ export default function PosPage() {
       }
     }
 
-    // 4) Prepare resi a
     setReceipt({
       invoiceNumber: inserted.invoice_number,
       dateTime: nowDateTime(),
       cashierName: ctx.fullName || 'Itilizatè',
-      items: saleItems.map(it => ({ name: it.name, quantity: it.quantity, unit_price: it.unit_price, total: it.total })),
+      items: saleItems.map(it => ({
+        name: it.name, quantity: it.quantity,
+        unit_price: it.unit_price, total: it.total,
+      })),
       total,
       cashGiven: cashNum,
       change,
     });
 
-    // 5) Mete total kach kès la ajou (kalkile ankò depi payments)
     await refreshCashSales(session.id);
 
     setProcessing(false);
@@ -478,13 +751,16 @@ export default function PosPage() {
     setCashGiven('');
     setScanMsg(null);
     setTimeout(() => barcodeRef.current?.focus(), 0);
-    // Rechaje pwodwi yo (stock ajou)
+
     const { data: freshProducts } = await supabase
       .from('products')
       .select('id, name, sale_price, quantity, image_url, barcode')
       .eq('business_id', ctx.businessId)
       .order('name');
-    setProducts(freshProducts ?? []);
+    if (freshProducts) {
+      saveCache('products', ctx.businessId, freshProducts);
+      setProducts(applyQueueToProducts(freshProducts, ctx.businessId));
+    }
   }
 
   function closeReceipt() {
@@ -495,16 +771,26 @@ export default function PosPage() {
     window.print();
   }
 
-  // ===== Fèmti kès =====
   function openCloseModal() {
     if (!session) return;
+    if (offline) {
+      setMsg('Ou pa ka fèmen kès la san entènèt.');
+      setTimeout(() => setMsg(''), 4000);
+      return;
+    }
+    if (pendingCount > 0) {
+      if (!confirm(
+        `Gen ${pendingCount} vant ki poko voye sou sèvè a. ` +
+        `Si ou fèmen kès la kounye a, vant sa yo p ap konte nan Rapò Z a.\n\n` +
+        `Klike "Voye kounye a" an premye. Kontinye kanmenm?`
+      )) return;
+    }
     setCountedInput('');
     setCashOutInput('');
     setMsg('');
     setShowCloseModal(true);
   }
 
-  // Kalkil an dirèk nan modal fèmti a
   const closeCashOut = parseFloat(cashOutInput) || 0;
   const closeExpected = session ? session.opening_amount + sessionCashSales - closeCashOut : 0;
   const closeCounted = parseFloat(countedInput);
@@ -517,9 +803,8 @@ export default function PosPage() {
 
     const supabase = createClient();
     const ctx = await getBusinessContext();
-    if (!ctx) { setClosingBusy(false); return; }
+    if (!ctx) { setClosingBusy(false); setMsg('Pa gen koneksyon.'); return; }
 
-    // Rekalkile total kach la yon dènye fwa (nan ka yon vant fèt antretan)
     const { data: pays } = await supabase
       .from('payments')
       .select('amount')
@@ -535,16 +820,15 @@ export default function PosPage() {
       closed_by: ctx.userId,
       cash_out: closeCashOut,
       counted_amount: closeCounted,
-      total_cash_sales: totalCash,   // snapshot fije
-      expected_amount: expected,     // snapshot fije
-      ecart: ecart,                  // snapshot fije
+      total_cash_sales: totalCash,
+      expected_amount: expected,
+      ecart: ecart,
       closed_at: closedAtIso,
     }).eq('id', session.id);
 
     setClosingBusy(false);
     if (error) { setMsg('Erè fèmti kès: ' + error.message); return; }
 
-    // Prepare Rapò Z a
     setZReport({
       openingAmount: session.opening_amount,
       totalCashSales: totalCash,
@@ -559,12 +843,13 @@ export default function PosPage() {
 
     setShowCloseModal(false);
     setSession(null);
+    saveCache('session', ctx.businessId, null);
     setSessionCashSales(0);
   }
 
   function closeZReport() {
     setZReport(null);
-    setShowOpenModal(true); // apre fèmti, mande ouvèti pou pwochen jounen an
+    setShowOpenModal(true);
   }
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
@@ -577,7 +862,14 @@ export default function PosPage() {
       <div className="flex-1 flex flex-col p-4 overflow-hidden print:hidden">
         <div className="mb-3">
           <div className="flex justify-between items-center mb-2">
-            <h1 className="text-xl font-semibold text-gray-900">Sistèm Vant</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-gray-900">Sistèm Vant</h1>
+              <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                offline ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
+              }`}>
+                {offline ? '⚠ Offline' : '● An liy'}
+              </span>
+            </div>
             {session ? (
               <button onClick={openCloseModal}
                 className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-200 whitespace-nowrap">
@@ -591,6 +883,36 @@ export default function PosPage() {
             )}
           </div>
 
+          {/* Avètisman offline */}
+          {offline && (
+            <div className="mb-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm text-orange-800">
+              Pa gen koneksyon. W ap wè pwodwi ki te chaje {formatCacheAge(dataAge)}.
+              <button onClick={load} className="ml-2 underline font-medium">Eseye ankò</button>
+            </div>
+          )}
+
+          {/* Vant k ap tann sinkronizasyon */}
+          {pendingCount > 0 && (
+            <div className="mb-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800 flex items-center justify-between gap-2">
+              <span>
+                📤 <strong>{pendingCount}</strong> vant k ap tann pou voye sou sèvè a.
+              </span>
+              {!offline && (
+                <button onClick={syncNow} disabled={syncing}
+                  className="px-3 py-1 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                  {syncing ? 'Ap voye...' : 'Voye kounye a'}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Mesaj sinkronizasyon */}
+          {syncMsg && (
+            <div className="mb-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
+              {syncMsg}
+            </div>
+          )}
+
           {/* Endikatè kès */}
           {session && (
             <div className="mb-2 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">
@@ -598,8 +920,7 @@ export default function PosPage() {
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
                 Kès louvri
               </span>
-              {/* Kesye pa wè total kach la an dirèk (konptaj avèg) */}
-              {!isCashier && (
+              {!isCashier && !offline && (
                 <span className="text-emerald-800">
                   Kach jounen an: <strong>{fmt(sessionCashSales)}</strong>
                 </span>
@@ -607,14 +928,13 @@ export default function PosPage() {
             </div>
           )}
 
-          {/* Avètisman: pa gen kès louvri */}
           {!session && (
             <div className="mb-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm text-amber-800">
               Kès la pa louvri. Ouvri kès la anvan ou fè yon vant.
             </div>
           )}
 
-          {/* Eskane barcode (tape / eskanè USB) */}
+          {/* Eskane barcode */}
           <form onSubmit={handleBarcodeSubmit} className="mb-2">
             <label className="text-xs text-gray-500 font-medium mb-1 block">Eskane barcode</label>
             <div className="flex gap-2">
@@ -634,7 +954,6 @@ export default function PosPage() {
             </div>
           </form>
 
-          {/* Bouton kamera */}
           <button
             type="button"
             onClick={openScanner}
@@ -767,6 +1086,12 @@ export default function PosPage() {
               Antre fon de kès la (kòb ki nan kès la kounye a) pou w ka kòmanse vann.
             </p>
 
+            {offline && (
+              <div className="mb-3 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm text-orange-800">
+                Ou pa gen koneksyon. Ouvèti kès mande entènèt.
+              </div>
+            )}
+
             <label className="text-sm text-gray-600 font-medium">Fon de kès ({currency})</label>
             <input
               type="number"
@@ -783,13 +1108,12 @@ export default function PosPage() {
 
             <button
               onClick={openSession}
-              disabled={openingBusy}
+              disabled={openingBusy || offline}
               className="w-full mt-5 py-3 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 disabled:opacity-50"
             >
               {openingBusy ? 'Ap ouvri...' : 'Ouvri kès la'}
             </button>
 
-            {/* Sòti san ouvri kès la */}
             {isCashier ? (
               <button
                 onClick={signOutFromPos}
@@ -863,6 +1187,12 @@ export default function PosPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Peman</h2>
 
+            {offline && (
+              <div className="mb-3 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-xs text-orange-800">
+                Mòd offline: vant lan ap sove sou aparèy la epi voye sou sèvè a lè koneksyon tounen.
+              </div>
+            )}
+
             <div className="bg-gray-50 rounded-xl p-4 mb-4 text-center">
               <p className="text-sm text-gray-500">Total pou peye</p>
               <p className="text-3xl font-bold text-gray-900 mt-1">{fmt(total)}</p>
@@ -916,7 +1246,6 @@ export default function PosPage() {
           <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Fèmen Kès</h2>
 
-            {/* Rezime chif yo — SÈLMAN pou mèt (konptaj avèg pou kesye) */}
             {!isCashier && (
               <div className="space-y-2 text-sm bg-gray-50 rounded-xl p-4 mb-4">
                 <div className="flex justify-between">
@@ -930,7 +1259,6 @@ export default function PosPage() {
               </div>
             )}
 
-            {/* Enstriksyon pou kesye (konptaj avèg) */}
             {isCashier && (
               <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4 text-sm text-indigo-800">
                 Konte tout kòb ki nan kès la epi tape total la anba. Sistèm nan ap fè rès kalkil la.
@@ -947,7 +1275,6 @@ export default function PosPage() {
             />
             <p className="text-xs text-gray-400 mb-3">Kòb ou retire nan kès la pandan jounen an (depans, monnen, elatriye).</p>
 
-            {/* Total dwe genyen — SÈLMAN pou mèt */}
             {!isCashier && (
               <div className="flex justify-between items-center bg-blue-50 rounded-lg px-4 py-2.5 mb-4">
                 <span className="text-sm text-blue-700 font-medium">Total dwe genyen</span>
@@ -965,7 +1292,6 @@ export default function PosPage() {
               className="w-full mt-1 px-4 py-3 border border-gray-200 rounded-lg text-lg font-semibold text-right focus:outline-none focus:ring-2 focus:ring-green-500"
             />
 
-            {/* Diferans an dirèk — SÈLMAN pou mèt (kesye wè l nan Rapò Z apre fèmti) */}
             {!isCashier && !isNaN(closeCounted) && (
               <div className="flex justify-between items-center mt-3 px-1">
                 <span className="text-gray-600">Diferans</span>
@@ -1001,7 +1327,7 @@ export default function PosPage() {
         </div>
       )}
 
-      {/* ===== MODAL RAPÒ Z (apre fèmti) ===== */}
+      {/* ===== MODAL RAPÒ Z ===== */}
       {zReport && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block">
           <div className="bg-white rounded-2xl w-full max-w-sm my-4 print:rounded-none print:max-w-none print:my-0">
@@ -1010,7 +1336,6 @@ export default function PosPage() {
               <button onClick={closeZReport} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
             </div>
 
-            {/* Rapò Z (fòma tikè 80mm) */}
             <div id="receipt-print" className="receipt-ticket">
               <div className="text-center">
                 <div className="biz-name">{biz?.business_name}</div>
@@ -1095,6 +1420,9 @@ export default function PosPage() {
               <div className="divider"></div>
 
               <div className="line">Resi: {receipt.invoiceNumber}</div>
+              {receipt.invoiceNumber.startsWith('OFF-') && (
+                <div className="line">(resi tanporè — offline)</div>
+              )}
               <div className="line">Dat: {receipt.dateTime}</div>
               <div className="line">Kesye: {receipt.cashierName}</div>
 
@@ -1165,19 +1493,13 @@ export default function PosPage() {
           font-weight: bold;
           margin-bottom: 2px;
         }
-        .receipt-ticket .line {
-          font-size: 11px;
-        }
+        .receipt-ticket .line { font-size: 11px; }
         .receipt-ticket .divider {
           border-top: 1px dashed #000;
           margin: 8px 0;
         }
-        .receipt-ticket .item {
-          margin-bottom: 4px;
-        }
-        .receipt-ticket .item-name {
-          font-weight: bold;
-        }
+        .receipt-ticket .item { margin-bottom: 4px; }
+        .receipt-ticket .item-name { font-weight: bold; }
         .receipt-ticket .item-row {
           display: flex;
           justify-content: space-between;
@@ -1193,23 +1515,16 @@ export default function PosPage() {
           font-size: 11px;
           margin-top: 4px;
         }
-        .receipt-ticket .text-center {
-          text-align: center;
-        }
+        .receipt-ticket .text-center { text-align: center; }
 
-        /* ===== ENPRIME: montre SÈLMAN resi a, optimize pou tèmik 80mm ===== */
         @media print {
           html, body {
             margin: 0 !important;
             padding: 0 !important;
             background: #fff !important;
           }
-          body * {
-            visibility: hidden;
-          }
-          #receipt-print, #receipt-print * {
-            visibility: visible;
-          }
+          body * { visibility: hidden; }
+          #receipt-print, #receipt-print * { visibility: visible; }
           #receipt-print {
             position: absolute;
             left: 0;
@@ -1231,10 +1546,7 @@ export default function PosPage() {
           #receipt-print .total-row {
             page-break-inside: avoid;
           }
-          @page {
-            size: 80mm auto;
-            margin: 0;
-          }
+          @page { size: 80mm auto; margin: 0; }
         }
       `}</style>
     </div>
