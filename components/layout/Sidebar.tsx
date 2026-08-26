@@ -10,7 +10,8 @@ const nav = [
   { href: '/expenses', label: 'Depans' },
   { href: '/clients', label: 'Kliyan / Dèt' },
   { href: '/inventory', label: 'Envantè', retailOnly: true },
- { href: '/cash-history', label: 'Istwa Kès' },
+  { href: '/promotions', label: 'Pwomosyon' },
+  { href: '/cash-history', label: 'Istwa Kès' },
   { href: '/reports', label: 'Rapò & Statistik' },
   { href: '/team', label: 'Itilizatè' },
   { href: '/subscribe', label: 'Achte lisans' },
@@ -41,7 +42,7 @@ export default function Sidebar({ businessName, isAdmin, niche, role, onNavigate
         <p className="text-xs text-gray-400 mt-0.5">Gonaïves, Ayiti</p>
       </div>
 
-      <nav className="flex-1 p-3 space-y-1">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {isCashier ? (
           // ===== MENI KESYE (sèlman POS) =====
           <Link href="/pos" onClick={onNavigate}

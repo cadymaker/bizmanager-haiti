@@ -44,6 +44,9 @@ interface Receipt {
   dateTime: string;
   cashierName: string;
   items: { name: string; quantity: number; unit_price: number; total: number }[];
+  subtotal: number;
+  discountAmount: number;
+  promoCode: string | null;
   total: number;
   cashGiven: number;
   change: number;
@@ -55,6 +58,18 @@ interface Session {
   cash_out: number;
   currency: string;
   opened_at: string;
+}
+
+interface Promotion {
+  id: string;
+  code: string;
+  label: string | null;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  min_amount: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
 }
 
 interface ZReport {
@@ -139,6 +154,15 @@ export default function PosPage() {
 
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
+  // ===== Rabè =====
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [discountMode, setDiscountMode] = useState<'none' | 'manual' | 'promo'>('none');
+  const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('percent');
+  const [discountInput, setDiscountInput] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<Promotion | null>(null);
+  const [promoErr, setPromoErr] = useState('');
+
   const isCashier = role === 'cashier';
 
   function cancelOpenSession() {
@@ -155,7 +179,6 @@ export default function PosPage() {
 
   useEffect(() => { load(); }, []);
 
-  // Reyaji lè rezo a tounen oswa mouri
   useEffect(() => {
     function onOnline() { load(); }
     function onOffline() { setOffline(true); }
@@ -172,8 +195,6 @@ export default function PosPage() {
 
     const supabase = createClient();
 
-    // Eseye jwenn kontèks la (li bezwen rezo). Si li echwe, n ap
-    // sèvi ak dènye businessId nou te sove a.
     const ctx = await withTimeout(getBusinessContext());
     const bid = ctx?.businessId ?? readLastBusinessId();
 
@@ -221,7 +242,6 @@ export default function PosPage() {
     }
 
     // ---- Pwodwi ----
-    // Kachèt la kenbe stock SÈVÈ a. Sa nou afiche = kachèt mwens fil datant.
     const prodRes = await withTimeout(
       supabase
         .from('products')
@@ -240,6 +260,23 @@ export default function PosPage() {
       const cachedProducts = readCache<Product[]>('products', bid) ?? [];
       setProducts(applyQueueToProducts(cachedProducts, bid));
       setDataAge(cacheAge('products', bid));
+    }
+
+    // ---- Pwomosyon ----
+    const promoRes = await withTimeout(
+      supabase
+        .from('promotions')
+        .select('id, code, label, discount_type, discount_value, min_amount, starts_at, ends_at, is_active')
+        .eq('business_id', bid)
+        .eq('is_active', true)
+    );
+
+    if (promoRes && (promoRes as any).data) {
+      const list = (promoRes as any).data as Promotion[];
+      setPromotions(list);
+      saveCache('promotions', bid, list);
+    } else {
+      setPromotions(readCache<Promotion[]>('promotions', bid) ?? []);
     }
 
     // ---- Sesyon kès ----
@@ -280,13 +317,11 @@ export default function PosPage() {
     setOffline(isOff);
     setLoading(false);
 
-    // Si nou an liy epi gen vant nan fil, sinkronize otomatikman
     if (!isOff && queueCount(bid) > 0 && !syncing) {
       const res = await syncQueue(bid);
       if (res.ok > 0) {
         setSyncMsg(`✓ ${res.ok} vant voye sou sèvè a.`);
         setTimeout(() => setSyncMsg(''), 5000);
-        // Rechaje pwodwi yo ak stock sèvè a ajou
         const fresh = await withTimeout(
           supabase
             .from('products')
@@ -336,7 +371,10 @@ export default function PosPage() {
 
     for (const sale of queue) {
       try {
-        // 1) Kreye fakti a
+        const meta: any = (sale as any).meta ?? {};
+        const sub = Number(meta.subtotal ?? sale.total);
+        const discAmount = Number(meta.discount_amount ?? 0);
+
         const { data: inserted, error: invErr } = await supabase
           .from('invoices')
           .insert({
@@ -344,7 +382,7 @@ export default function PosPage() {
             client_id: null,
             niche_template: 'retail',
             issue_date: sale.issue_date,
-            subtotal: sale.total,
+            subtotal: sub,
             tax_rate: 0,
             tax_amount: 0,
             total_amount: sale.total,
@@ -354,9 +392,14 @@ export default function PosPage() {
             source: 'pos',
             created_by: sale.user_id || null,
             session_id: sale.session_id,
+            discount_type: meta.discount_type ?? null,
+            discount_value: Number(meta.discount_value ?? 0),
+            discount_amount: discAmount,
+            promo_code: meta.promo_code ?? null,
             metadata: {
               items: sale.items,
-              discount: 0,
+              subtotal: sub,
+              discount: discAmount,
               cash_given: sale.cash_given,
               change: sale.change,
               offline: true,
@@ -373,7 +416,6 @@ export default function PosPage() {
           continue;
         }
 
-        // 2) Peman an
         await supabase.from('payments').insert({
           invoice_id: inserted.id,
           business_id: sale.business_id,
@@ -382,7 +424,6 @@ export default function PosPage() {
           session_id: sale.session_id,
         });
 
-        // 3) Desann stock sou sèvè a
         for (const it of sale.items) {
           const { data: prod } = await supabase
             .from('products')
@@ -397,7 +438,6 @@ export default function PosPage() {
           }
         }
 
-        // 4) Retire l nan fil la — sèlman lè tout bagay pase
         removeFromQueue(bid, sale.local_id);
         ok++;
       } catch (e: any) {
@@ -411,7 +451,6 @@ export default function PosPage() {
     return { ok, failed };
   }
 
-  // Sinkronize epi rechaje done yo
   async function syncNow() {
     if (!businessId || syncing) return;
     setSyncMsg('');
@@ -587,24 +626,91 @@ export default function PosPage() {
     setCart(prev => prev.filter(it => it.product_id !== productId));
   }
 
+  function clearDiscount() {
+    setDiscountMode('none');
+    setDiscountInput('');
+    setPromoInput('');
+    setAppliedPromo(null);
+    setPromoErr('');
+  }
+
   function clearCart() {
     if (cart.length > 0 && !confirm('Vide panye a?')) return;
     setCart([]);
     setScanMsg(null);
+    clearDiscount();
   }
 
-  const total = cart.reduce((s, it) => s + it.unit_price * it.quantity, 0);
+  const subtotal = cart.reduce((s, it) => s + it.unit_price * it.quantity, 0);
   const itemCount = cart.reduce((s, it) => s + it.quantity, 0);
   const fmt = (n: number) => formatMoney(n, currency);
 
+  // ===== Kalkile rabè a =====
+  function computeDiscount(): { amount: number; type: string | null; value: number } {
+    if (discountMode === 'promo' && appliedPromo) {
+      const amt = appliedPromo.discount_type === 'percent'
+        ? (subtotal * appliedPromo.discount_value) / 100
+        : appliedPromo.discount_value;
+      return {
+        amount: Math.min(Math.max(0, amt), subtotal),
+        type: appliedPromo.discount_type,
+        value: appliedPromo.discount_value,
+      };
+    }
+    if (discountMode === 'manual') {
+      const v = parseFloat(discountInput) || 0;
+      if (v <= 0) return { amount: 0, type: null, value: 0 };
+      const amt = discountType === 'percent' ? (subtotal * v) / 100 : v;
+      return {
+        amount: Math.min(Math.max(0, amt), subtotal),
+        type: discountType,
+        value: v,
+      };
+    }
+    return { amount: 0, type: null, value: 0 };
+  }
+
+  const discount = computeDiscount();
+  const total = Math.max(0, subtotal - discount.amount);
+
   const cashNum = parseFloat(cashGiven) || 0;
   const change = cashNum - total;
+
+  // Aplike yon kòd promo
+  function applyPromo() {
+    setPromoErr('');
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+
+    const promo = promotions.find(p => p.code.toUpperCase() === code);
+    if (!promo) { setPromoErr('Kòd promo sa a pa egziste.'); return; }
+    if (!promo.is_active) { setPromoErr('Kòd promo sa a pa aktif.'); return; }
+
+    const today = todayLocalDate();
+    if (promo.starts_at && today < promo.starts_at) {
+      setPromoErr(`Promo a kòmanse ${promo.starts_at}.`);
+      return;
+    }
+    if (promo.ends_at && today > promo.ends_at) {
+      setPromoErr('Promo sa a fini deja.');
+      return;
+    }
+    if (promo.min_amount && subtotal < Number(promo.min_amount)) {
+      setPromoErr(`Acha a dwe omwen ${fmt(Number(promo.min_amount))} pou promo sa a.`);
+      return;
+    }
+
+    setAppliedPromo(promo);
+    setDiscountMode('promo');
+    setPromoInput('');
+  }
 
   function openPayment() {
     if (cart.length === 0) return;
     if (!session) { setShowOpenModal(true); return; }
     setCashGiven('');
     setMsg('');
+    setPromoErr('');
     setShowPayment(true);
   }
 
@@ -623,6 +729,9 @@ export default function PosPage() {
       total: it.unit_price * it.quantity,
     }));
 
+    const discAmount = discount.amount;
+    const promoCode = discountMode === 'promo' && appliedPromo ? appliedPromo.code : null;
+
     // ===== VANT OFFLINE =====
     if (offline) {
       if (!businessId) { setMsg('Pa gen done biznis lokal.'); return; }
@@ -630,7 +739,7 @@ export default function PosPage() {
       const tempNumber = nextTempNumber(businessId);
       const nowIso = new Date().toISOString();
 
-      const queued: QueuedSale = {
+      const queued: any = {
         local_id: makeLocalId(),
         business_id: businessId,
         session_id: session.id,
@@ -644,13 +753,18 @@ export default function PosPage() {
         cash_given: cashNum,
         change: change,
         temp_number: tempNumber,
+        meta: {
+          subtotal: subtotal,
+          discount_type: discount.type,
+          discount_value: discount.value,
+          discount_amount: discAmount,
+          promo_code: promoCode,
+        },
       };
 
-      addToQueue(businessId, queued);
+      addToQueue(businessId, queued as QueuedSale);
       setPendingCount(queueCount(businessId));
 
-      // Rekalkile stock la depi kachèt la mwens fil datant lan
-      // (kachèt la pa touche — li kenbe stock sèvè a)
       const pristine = readCache<Product[]>('products', businessId) ?? products;
       setProducts(applyQueueToProducts(pristine, businessId));
 
@@ -662,6 +776,9 @@ export default function PosPage() {
           name: it.name, quantity: it.quantity,
           unit_price: it.unit_price, total: it.total,
         })),
+        subtotal,
+        discountAmount: discAmount,
+        promoCode,
         total,
         cashGiven: cashNum,
         change,
@@ -671,6 +788,7 @@ export default function PosPage() {
       setCart([]);
       setCashGiven('');
       setScanMsg(null);
+      clearDiscount();
       setTimeout(() => barcodeRef.current?.focus(), 0);
       return;
     }
@@ -688,7 +806,7 @@ export default function PosPage() {
       client_id: null,
       niche_template: 'retail',
       issue_date: todayLocalDate(),
-      subtotal: total,
+      subtotal: subtotal,
       tax_rate: 0,
       tax_amount: 0,
       total_amount: total,
@@ -698,9 +816,14 @@ export default function PosPage() {
       source: 'pos',
       created_by: ctx.userId,
       session_id: session.id,
+      discount_type: discount.type,
+      discount_value: discount.value,
+      discount_amount: discAmount,
+      promo_code: promoCode,
       metadata: {
         items: saleItems,
-        discount: 0,
+        subtotal: subtotal,
+        discount: discAmount,
         cash_given: cashNum,
         change: change,
       },
@@ -730,6 +853,21 @@ export default function PosPage() {
       }
     }
 
+    // Konte itilizasyon promo a
+    if (promoCode && appliedPromo) {
+      const { data: pr } = await supabase
+        .from('promotions')
+        .select('times_used')
+        .eq('id', appliedPromo.id)
+        .single();
+      if (pr) {
+        await supabase
+          .from('promotions')
+          .update({ times_used: Number(pr.times_used || 0) + 1 })
+          .eq('id', appliedPromo.id);
+      }
+    }
+
     setReceipt({
       invoiceNumber: inserted.invoice_number,
       dateTime: nowDateTime(),
@@ -738,6 +876,9 @@ export default function PosPage() {
         name: it.name, quantity: it.quantity,
         unit_price: it.unit_price, total: it.total,
       })),
+      subtotal,
+      discountAmount: discAmount,
+      promoCode,
       total,
       cashGiven: cashNum,
       change,
@@ -750,6 +891,7 @@ export default function PosPage() {
     setCart([]);
     setCashGiven('');
     setScanMsg(null);
+    clearDiscount();
     setTimeout(() => barcodeRef.current?.focus(), 0);
 
     const { data: freshProducts } = await supabase
@@ -883,7 +1025,6 @@ export default function PosPage() {
             )}
           </div>
 
-          {/* Avètisman offline */}
           {offline && (
             <div className="mb-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2 text-sm text-orange-800">
               Pa gen koneksyon. W ap wè pwodwi ki te chaje {formatCacheAge(dataAge)}.
@@ -891,7 +1032,6 @@ export default function PosPage() {
             </div>
           )}
 
-          {/* Vant k ap tann sinkronizasyon */}
           {pendingCount > 0 && (
             <div className="mb-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800 flex items-center justify-between gap-2">
               <span>
@@ -906,14 +1046,12 @@ export default function PosPage() {
             </div>
           )}
 
-          {/* Mesaj sinkronizasyon */}
           {syncMsg && (
             <div className="mb-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2 text-sm text-green-800">
               {syncMsg}
             </div>
           )}
 
-          {/* Endikatè kès */}
           {session && (
             <div className="mb-2 flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-sm">
               <span className="text-emerald-700 flex items-center gap-1">
@@ -934,7 +1072,6 @@ export default function PosPage() {
             </div>
           )}
 
-          {/* Eskane barcode */}
           <form onSubmit={handleBarcodeSubmit} className="mb-2">
             <label className="text-xs text-gray-500 font-medium mb-1 block">Eskane barcode</label>
             <div className="flex gap-2">
@@ -1062,7 +1199,21 @@ export default function PosPage() {
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-100 space-y-3">
+        <div className="p-4 border-t border-gray-100 space-y-2">
+          {discount.amount > 0 && (
+            <>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-500">Soutotal</span>
+                <span className="text-gray-700">{fmt(subtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-green-700">
+                  Rabè {discountMode === 'promo' && appliedPromo ? `(${appliedPromo.code})` : ''}
+                </span>
+                <span className="text-green-700 font-medium">− {fmt(discount.amount)}</span>
+              </div>
+            </>
+          )}
           <div className="flex justify-between items-center">
             <span className="text-gray-600">Total</span>
             <span className="text-2xl font-bold text-gray-900">{fmt(total)}</span>
@@ -1182,9 +1333,9 @@ export default function PosPage() {
 
       {/* ===== MODAL PEMAN ===== */}
       {showPayment && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 print:hidden"
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:hidden"
           onClick={() => !processing && setShowPayment(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 my-4" onClick={e => e.stopPropagation()}>
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Peman</h2>
 
             {offline && (
@@ -1193,15 +1344,120 @@ export default function PosPage() {
               </div>
             )}
 
-            <div className="bg-gray-50 rounded-xl p-4 mb-4 text-center">
-              <p className="text-sm text-gray-500">Total pou peye</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{fmt(total)}</p>
+            {/* ===== RABÈ ===== */}
+            <div className="border border-gray-200 rounded-xl p-3 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium text-gray-700">Rabè</span>
+                {discountMode !== 'none' && (
+                  <button onClick={clearDiscount}
+                    className="text-xs text-red-600 hover:underline">Retire rabè</button>
+                )}
+              </div>
+
+              {discountMode === 'none' && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button onClick={() => setDiscountMode('manual')}
+                    className="py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 text-gray-700">
+                    Rabè manyèl
+                  </button>
+                  <button onClick={() => setDiscountMode('promo')}
+                    className="py-2 rounded-lg text-sm font-medium border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">
+                    🎟️ Kòd promo
+                  </button>
+                </div>
+              )}
+
+              {discountMode === 'manual' && (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <button onClick={() => setDiscountType('percent')}
+                      className={`py-2 rounded-lg text-sm font-medium border ${
+                        discountType === 'percent'
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}>
+                      Pousantaj (%)
+                    </button>
+                    <button onClick={() => setDiscountType('fixed')}
+                      className={`py-2 rounded-lg text-sm font-medium border ${
+                        discountType === 'fixed'
+                          ? 'bg-green-600 text-white border-green-600'
+                          : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                      }`}>
+                      Montan fiks
+                    </button>
+                  </div>
+                  <input
+                    type="number"
+                    autoFocus
+                    placeholder={discountType === 'percent' ? 'Egzanp: 10' : 'Egzanp: 500'}
+                    value={discountInput}
+                    onChange={e => setDiscountInput(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-right font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
+                  />
+                </div>
+              )}
+
+              {discountMode === 'promo' && (
+                <div className="space-y-2">
+                  {appliedPromo ? (
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800">
+                      ✓ <strong>{appliedPromo.code}</strong>
+                      {appliedPromo.label && <span> — {appliedPromo.label}</span>}
+                      <div className="text-xs mt-0.5">
+                        {appliedPromo.discount_type === 'percent'
+                          ? `${appliedPromo.discount_value}% rabè`
+                          : `${fmt(appliedPromo.discount_value)} rabè`}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Antre kòd promo a"
+                        value={promoInput}
+                        onChange={e => setPromoInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyPromo(); } }}
+                        className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      />
+                      <button onClick={applyPromo}
+                        className="px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 whitespace-nowrap">
+                        Aplike
+                      </button>
+                    </div>
+                  )}
+                  {promoErr && (
+                    <div className="text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700">{promoErr}</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ===== REZIME ===== */}
+            <div className="bg-gray-50 rounded-xl p-4 mb-4 space-y-1">
+              {discount.amount > 0 && (
+                <>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Soutotal</span>
+                    <span className="text-gray-700">{fmt(subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-green-700">Rabè</span>
+                    <span className="text-green-700 font-medium">− {fmt(discount.amount)}</span>
+                  </div>
+                  <div className="border-t border-gray-200 my-1"></div>
+                </>
+              )}
+              <div className="text-center">
+                <p className="text-sm text-gray-500">Total pou peye</p>
+                <p className="text-3xl font-bold text-gray-900 mt-0.5">{fmt(total)}</p>
+              </div>
             </div>
 
             <label className="text-sm text-gray-600 font-medium">Kòb kliyan bay</label>
             <input
               type="number"
-              autoFocus
               placeholder="0"
               value={cashGiven}
               onChange={e => setCashGiven(e.target.value)}
@@ -1439,6 +1695,19 @@ export default function PosPage() {
               ))}
 
               <div className="divider"></div>
+
+              {receipt.discountAmount > 0 && (
+                <>
+                  <div className="item-row">
+                    <span>Soutotal</span>
+                    <span>{fmt(receipt.subtotal)}</span>
+                  </div>
+                  <div className="item-row">
+                    <span>Rabè{receipt.promoCode ? ` (${receipt.promoCode})` : ''}</span>
+                    <span>- {fmt(receipt.discountAmount)}</span>
+                  </div>
+                </>
+              )}
 
               <div className="total-row">
                 <span>TOTAL</span>
