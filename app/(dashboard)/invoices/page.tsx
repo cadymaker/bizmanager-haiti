@@ -12,6 +12,17 @@ interface Item {
 }
 interface Client { id: string; name: string; }
 interface Product { id: string; name: string; sale_price: number; quantity: number; }
+interface Promotion {
+  id: string;
+  code: string;
+  label: string | null;
+  discount_type: 'percent' | 'fixed';
+  discount_value: number;
+  min_amount: number | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  is_active: boolean;
+}
 interface Invoice {
   id: string;
   invoice_number: string;
@@ -33,7 +44,6 @@ function formatInvoiceDate(dateStr: string): string {
 }
 
 // Dat jodi a nan lè LOKAL la (Ayiti), pa an UTC.
-// Konsa yon fakti ou kreye aswè p ap pran dat demen.
 function todayLocalDate(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -44,6 +54,7 @@ export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [msg, setMsg] = useState('');
@@ -53,7 +64,14 @@ export default function InvoicesPage() {
 
   const [clientId, setClientId] = useState('');
   const [items, setItems] = useState<Item[]>([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
-  const [discount, setDiscount] = useState(0);
+
+  // ===== Rabè =====
+  const [discountMode, setDiscountMode] = useState<'none' | 'manual' | 'promo'>('none');
+  const [discountType, setDiscountType] = useState<'percent' | 'fixed'>('fixed');
+  const [discountInput, setDiscountInput] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<Promotion | null>(null);
+  const [promoErr, setPromoErr] = useState('');
 
   useEffect(() => { load(); }, []);
 
@@ -91,6 +109,13 @@ export default function InvoicesPage() {
       .order('name');
     setProducts(pr ?? []);
 
+    const { data: promo } = await supabase
+      .from('promotions')
+      .select('id, code, label, discount_type, discount_value, min_amount, starts_at, ends_at, is_active')
+      .eq('business_id', ctx.businessId)
+      .eq('is_active', true);
+    setPromotions((promo as any) ?? []);
+
     setLoading(false);
   }
 
@@ -125,7 +150,70 @@ export default function InvoicesPage() {
   }
 
   const subtotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
-  const totalAfterDiscount = Math.max(0, subtotal - discount);
+
+  // ===== Kalkile rabè a =====
+  function computeDiscount(): { amount: number; type: string | null; value: number } {
+    if (discountMode === 'promo' && appliedPromo) {
+      const amt = appliedPromo.discount_type === 'percent'
+        ? (subtotal * appliedPromo.discount_value) / 100
+        : appliedPromo.discount_value;
+      return {
+        amount: Math.min(Math.max(0, amt), subtotal),
+        type: appliedPromo.discount_type,
+        value: appliedPromo.discount_value,
+      };
+    }
+    if (discountMode === 'manual') {
+      const v = parseFloat(discountInput) || 0;
+      if (v <= 0) return { amount: 0, type: null, value: 0 };
+      const amt = discountType === 'percent' ? (subtotal * v) / 100 : v;
+      return {
+        amount: Math.min(Math.max(0, amt), subtotal),
+        type: discountType,
+        value: v,
+      };
+    }
+    return { amount: 0, type: null, value: 0 };
+  }
+
+  const discount = computeDiscount();
+  const totalAfterDiscount = Math.max(0, subtotal - discount.amount);
+
+  function applyPromo() {
+    setPromoErr('');
+    const code = promoInput.trim().toUpperCase();
+    if (!code) return;
+
+    const promo = promotions.find(p => p.code.toUpperCase() === code);
+    if (!promo) { setPromoErr('Kòd promo sa a pa egziste.'); return; }
+    if (!promo.is_active) { setPromoErr('Kòd promo sa a pa aktif.'); return; }
+
+    const today = todayLocalDate();
+    if (promo.starts_at && today < promo.starts_at) {
+      setPromoErr(`Promo a kòmanse ${promo.starts_at}.`);
+      return;
+    }
+    if (promo.ends_at && today > promo.ends_at) {
+      setPromoErr('Promo sa a fini deja.');
+      return;
+    }
+    if (promo.min_amount && subtotal < Number(promo.min_amount)) {
+      setPromoErr(`Fakti a dwe omwen ${fmt(Number(promo.min_amount))} pou promo sa a.`);
+      return;
+    }
+
+    setAppliedPromo(promo);
+    setDiscountMode('promo');
+    setPromoInput('');
+  }
+
+  function clearDiscount() {
+    setDiscountMode('none');
+    setDiscountInput('');
+    setPromoInput('');
+    setAppliedPromo(null);
+    setPromoErr('');
+  }
 
   async function saveInvoice(e: React.FormEvent) {
     e.preventDefault();
@@ -151,7 +239,21 @@ export default function InvoicesPage() {
     if (!ctx) { setSaving(false); return; }
 
     const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
-    const finalTotal = Math.max(0, rawTotal - discount);
+
+    // Rekalkile rabè a sou atik valab yo
+    let discAmount = 0;
+    if (discountMode === 'promo' && appliedPromo) {
+      discAmount = appliedPromo.discount_type === 'percent'
+        ? (rawTotal * appliedPromo.discount_value) / 100
+        : appliedPromo.discount_value;
+    } else if (discountMode === 'manual') {
+      const v = parseFloat(discountInput) || 0;
+      discAmount = discountType === 'percent' ? (rawTotal * v) / 100 : v;
+    }
+    discAmount = Math.min(Math.max(0, discAmount), rawTotal);
+
+    const finalTotal = Math.max(0, rawTotal - discAmount);
+    const promoCode = discountMode === 'promo' && appliedPromo ? appliedPromo.code : null;
 
     const { data: inserted, error } = await supabase.from('invoices').insert({
       business_id: ctx.businessId,
@@ -165,6 +267,10 @@ export default function InvoicesPage() {
       amount_paid: 0,
       currency: currency,
       status: 'sent',
+      discount_type: discount.type,
+      discount_value: discount.value,
+      discount_amount: discAmount,
+      promo_code: promoCode,
       metadata: {
         items: validItems.map(it => ({
           name: it.name,
@@ -173,7 +279,8 @@ export default function InvoicesPage() {
           total: it.quantity * it.unit_price,
           product_id: it.product_id ?? null,
         })),
-        discount: discount,
+        subtotal: rawTotal,
+        discount: discAmount,
       },
     }).select('id').single();
 
@@ -195,12 +302,27 @@ export default function InvoicesPage() {
       }
     }
 
+    // Konte itilizasyon promo a
+    if (promoCode && appliedPromo) {
+      const { data: pr } = await supabase
+        .from('promotions')
+        .select('times_used')
+        .eq('id', appliedPromo.id)
+        .single();
+      if (pr) {
+        await supabase
+          .from('promotions')
+          .update({ times_used: Number(pr.times_used || 0) + 1 })
+          .eq('id', appliedPromo.id);
+      }
+    }
+
     setLastCreatedId(inserted?.id ?? null);
     setMsg('Fakti kreye ak siksè!');
     setShowForm(false);
     setClientId('');
     setItems([{ name: '', quantity: 1, unit_price: 0, product_id: null }]);
-    setDiscount(0);
+    clearDiscount();
     load();
     setSaving(false);
   }
@@ -211,7 +333,7 @@ export default function InvoicesPage() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Factures</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Fakti</h1>
         <button onClick={() => { setShowForm(!showForm); setLastCreatedId(null); }}
           className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700">
           {showForm ? 'Fèmen' : '+ Nouvo fakti'}
@@ -298,17 +420,109 @@ export default function InvoicesPage() {
               className="mt-2 text-sm text-blue-600 hover:underline">+ Ajoute atik</button>
           </div>
 
+          {/* ===== RABÈ ===== */}
+          <div className="border border-gray-200 rounded-xl p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">Rabè</span>
+              {discountMode !== 'none' && (
+                <button type="button" onClick={clearDiscount}
+                  className="text-xs text-red-600 hover:underline">Retire rabè</button>
+              )}
+            </div>
+
+            {discountMode === 'none' && (
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setDiscountMode('manual')}
+                  className="py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-50 text-gray-700">
+                  Rabè manyèl
+                </button>
+                <button type="button" onClick={() => setDiscountMode('promo')}
+                  className="py-2 rounded-lg text-sm font-medium border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">
+                  🎟️ Kòd promo
+                </button>
+              </div>
+            )}
+
+            {discountMode === 'manual' && (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <button type="button" onClick={() => setDiscountType('percent')}
+                    className={`py-2 rounded-lg text-sm font-medium border ${
+                      discountType === 'percent'
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}>
+                    Pousantaj (%)
+                  </button>
+                  <button type="button" onClick={() => setDiscountType('fixed')}
+                    className={`py-2 rounded-lg text-sm font-medium border ${
+                      discountType === 'fixed'
+                        ? 'bg-green-600 text-white border-green-600'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                    }`}>
+                    Montan fiks ({sym})
+                  </button>
+                </div>
+                <input
+                  type="number"
+                  placeholder={discountType === 'percent' ? 'Egzanp: 10' : 'Egzanp: 500'}
+                  value={discountInput}
+                  onChange={e => setDiscountInput(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-200 rounded-lg text-right font-semibold focus:outline-none focus:ring-2 focus:ring-green-500"
+                />
+              </div>
+            )}
+
+            {discountMode === 'promo' && (
+              <div className="space-y-2">
+                {appliedPromo ? (
+                  <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800">
+                    ✓ <strong>{appliedPromo.code}</strong>
+                    {appliedPromo.label && <span> — {appliedPromo.label}</span>}
+                    <div className="text-xs mt-0.5">
+                      {appliedPromo.discount_type === 'percent'
+                        ? `${appliedPromo.discount_value}% rabè`
+                        : `${fmt(appliedPromo.discount_value)} rabè`}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      placeholder="Antre kòd promo a"
+                      value={promoInput}
+                      onChange={e => setPromoInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); applyPromo(); } }}
+                      className="flex-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm uppercase focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    />
+                    <button type="button" onClick={applyPromo}
+                      className="px-4 py-2.5 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 whitespace-nowrap">
+                      Aplike
+                    </button>
+                  </div>
+                )}
+                {promoErr && (
+                  <div className="text-sm rounded-lg px-3 py-2 bg-red-50 text-red-700">{promoErr}</div>
+                )}
+              </div>
+            )}
+          </div>
+
           <div className="border-t pt-3 space-y-2">
             <div className="flex justify-end items-center gap-4">
               <span className="text-sm text-gray-500">Sou-total:</span>
               <span className="text-sm font-medium w-28 text-right">{fmt(subtotal)}</span>
             </div>
-            <div className="flex justify-end items-center gap-4">
-              <span className="text-sm text-gray-500">Rabè ({sym}):</span>
-              <input type="number" value={discount === 0 ? '' : discount} placeholder="0"
-                onChange={e => setDiscount(parseFloat(e.target.value) || 0)}
-                className="w-28 px-2 py-1 border border-gray-200 rounded-lg text-sm text-right" />
-            </div>
+            {discount.amount > 0 && (
+              <div className="flex justify-end items-center gap-4">
+                <span className="text-sm text-green-700">
+                  Rabè {discountMode === 'promo' && appliedPromo ? `(${appliedPromo.code})` : ''}:
+                </span>
+                <span className="text-sm font-medium text-green-700 w-28 text-right">
+                  − {fmt(discount.amount)}
+                </span>
+              </div>
+            )}
             <div className="flex justify-end items-center gap-4">
               <span className="text-sm text-gray-500">Total:</span>
               <span className="text-lg font-semibold w-28 text-right">{fmt(totalAfterDiscount)}</span>
@@ -326,11 +540,11 @@ export default function InvoicesPage() {
         <table className="w-full text-sm min-w-[700px]">
           <thead>
             <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
-              <th className="px-4 py-3">Numewo</th>
+              <th className="px-4 py-3">Nimewo</th>
               <th className="px-4 py-3">Kliyan</th>
-              <th className="px-4 py-3">Date</th>
+              <th className="px-4 py-3">Dat</th>
               <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Solde</th>
+              <th className="px-4 py-3">Balans</th>
               <th className="px-4 py-3">Estati</th>
               <th className="px-4 py-3">Aksyon</th>
             </tr>
@@ -353,7 +567,7 @@ export default function InvoicesPage() {
                 <td className="px-4 py-3">
                   {inv.balance_due > 0
                     ? <span className="text-orange-600">{fmt(inv.balance_due)}</span>
-                    : <span className="text-green-600">Soldé</span>}
+                    : <span className="text-green-600">Peye nèt</span>}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
