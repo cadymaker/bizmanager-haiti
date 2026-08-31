@@ -33,7 +33,6 @@ function localDate(d: Date): string {
 function toLocalDay(v: any): string | null {
   if (!v) return null;
   const s = String(v);
-  // Dat senp 'YYYY-MM-DD' → pran l jan l ye (evite dekalaj UTC)
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
   const d = new Date(s);
   if (isNaN(d.getTime())) return null;
@@ -55,6 +54,7 @@ export default function ReportsPage() {
   const [totalExpenses, setTotalExpenses] = useState(0);
   const [totalLoss, setTotalLoss] = useState(0);
   const [saleCount, setSaleCount] = useState(0);
+  const [totalDiscount, setTotalDiscount] = useState(0);
   const [topItems, setTopItems] = useState<SoldItem[]>([]);
   const [dayPoints, setDayPoints] = useState<DayPoint[]>([]);
 
@@ -82,7 +82,6 @@ export default function ReportsPage() {
     const startStr = localDate(start);
     const endStr = localDate(end);
 
-    // Èske yon jou tonbe nan peryòd la?
     const inPeriod = (day: string | null) =>
       !!day && day >= startStr && day <= endStr;
 
@@ -97,13 +96,14 @@ export default function ReportsPage() {
     // Fakti nan peryòd la
     const { data: invoices } = await supabase
       .from('invoices')
-      .select('id, issue_date, total_amount, metadata')
+      .select('id, issue_date, total_amount, discount_amount, metadata')
       .eq('business_id', ctx.businessId)
       .gte('issue_date', startStr)
       .lte('issue_date', endStr);
 
     let sales = 0;
     let cost = 0;
+    let discountSum = 0;
     const itemMap = new Map<string, SoldItem>();
     const dayMap = new Map<string, number>();
 
@@ -112,11 +112,29 @@ export default function ReportsPage() {
       sales += amt;
       dayMap.set(inv.issue_date, (dayMap.get(inv.issue_date) ?? 0) + amt);
 
+      // Rabè a: nan kolòn nan (nouvo fakti) oswa nan metadata (ansyen fakti)
+            // Ansyen fakti gen rabè a nan metadata; nouvo yo gen kolòn nan.
+      // Kolòn nan gen default 0, kidonk nou pran metadata a lè li se 0.
+      const colDisc = Number(inv.discount_amount || 0);
+      const metaDisc = Number(inv.metadata?.discount || 0);
+      const discAmount = colDisc > 0 ? colDisc : metaDisc;
+      discountSum += discAmount;
+
       const items = inv.metadata?.items;
       if (Array.isArray(items)) {
+        // Soutotal atik yo (anvan rabè)
+        const itemsSum = items.reduce(
+          (s: number, it: any) => s + Number(it.total || 0), 0
+        );
+
         items.forEach((it: any) => {
           const qty = Number(it.quantity || 0);
-          const rev = Number(it.total || 0);
+          const gross = Number(it.total || 0);
+
+          // Distribye rabè a pwopòsyonèlman sou chak atik
+          const share = itemsSum > 0 ? gross / itemsSum : 0;
+          const rev = Math.max(0, gross - discAmount * share);
+
           const unitCost = it.product_id ? (costMap.get(it.product_id) ?? 0) : 0;
           const itemCost = unitCost * qty;
           cost += itemCost;
@@ -136,6 +154,7 @@ export default function ReportsPage() {
 
     setTotalSales(sales);
     setTotalCost(cost);
+    setTotalDiscount(discountSum);
     setSaleCount((invoices ?? []).length);
 
     // Top 10 pwodwi (pa kantite vann)
@@ -156,8 +175,6 @@ export default function ReportsPage() {
     setDayPoints(points);
 
     // ===== Depans =====
-    // Nou chaje yo epi filtre nan JS, konsa li mache kèlkeswa non ak
-    // kalite kolòn dat la (dat senp oswa timestamp ak lè lokal).
     const { data: allExpenses } = await supabase
       .from('expenses')
       .select('*')
@@ -199,7 +216,6 @@ export default function ReportsPage() {
 
   // Ekspòte CSV (separatè ';' pou Excel franse, chif san gimè)
   function exportCSV() {
-    // Tèks → antoure ak gimè. Chif → kite jan l ye pou Excel ka kalkile.
     const txt = (v: any) => `"${String(v).replace(/"/g, '""')}"`;
     const num = (v: number) => String(Math.round(Number(v) * 100) / 100);
 
@@ -208,6 +224,7 @@ export default function ReportsPage() {
     rows.push([]);
     rows.push([txt('REZIME')]);
     rows.push([txt('Vant total'), num(totalSales)]);
+    rows.push([txt('Rabè bay kliyan'), num(totalDiscount)]);
     rows.push([txt('Kou pwodwi vann'), num(totalCost)]);
     rows.push([txt('Depans'), num(totalExpenses)]);
     rows.push([txt('Pèt nan stock'), num(totalLoss)]);
@@ -230,10 +247,8 @@ export default function ReportsPage() {
     rows.push([txt('Dat'), txt('Total')]);
     dayPoints.forEach(p => rows.push([txt(p.date), num(p.total)]));
 
-    // 'sep=;' di Excel ki separatè pou itilize (mache an FR ak an EN)
     const csv = 'sep=;\n' + rows.map(r => r.join(';')).join('\n');
 
-    // BOM pou aksan yo parèt byen nan Excel
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -303,9 +318,15 @@ export default function ReportsPage() {
             <h2 className="font-medium text-gray-800 mb-3">Kijan benefis nèt la kalkile</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-600">Vant total</span>
+                <span className="text-gray-600">Vant total (apre rabè)</span>
                 <span className="font-medium text-gray-900">{fmt(totalSales)}</span>
               </div>
+              {totalDiscount > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-gray-400">Rabè bay kliyan yo</span>
+                  <span className="text-gray-400">{fmt(totalDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between">
                 <span className="text-gray-600">− Kou pwodwi vann yo</span>
                 <span className="font-medium text-gray-700">{fmt(totalCost)}</span>
@@ -355,6 +376,7 @@ export default function ReportsPage() {
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="font-medium text-gray-800">Pwodwi ki pi vann ({periodLabel})</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Revni yo apre rabè.</p>
             </div>
             <table className="w-full text-sm min-w-[600px]">
               <thead>
