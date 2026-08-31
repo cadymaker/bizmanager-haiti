@@ -180,7 +180,6 @@ export default function SettingsPage() {
     const data = await res.json();
 
     if (res.ok) {
-      // Kont lan efase — dekonekte epi voye l sou paj konekte a
       await supabase.auth.signOut();
       window.location.href = '/login';
       return;
@@ -330,6 +329,24 @@ export default function SettingsPage() {
           className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100">
           🖨️ Wè gid konfigirasyon an
         </a>
+      </div>
+
+      {/* ÈD & OPINYON */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-medium text-gray-800">Èd &amp; Opinyon</h2>
+        <p className="text-sm text-gray-500 mt-0.5">
+          Jwenn repons pou kesyon ou yo, oswa di nou sa ou panse sou app la.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-2 mt-3">
+          <a href="/settings/help"
+            className="flex-1 text-center px-4 py-2.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg text-sm font-medium hover:bg-blue-100">
+            ❓ Èd &amp; Kesyon souvan
+          </a>
+          <a href="/settings/feedback"
+            className="flex-1 text-center px-4 py-2.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-medium hover:bg-purple-100">
+            💬 Ban nou opinyon w
+          </a>
+        </div>
       </div>
 
       {/* LEGAL */}

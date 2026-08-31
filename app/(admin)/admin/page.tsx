@@ -176,9 +176,14 @@ export default function AdminDashboard() {
           <h1 className="text-2xl font-semibold text-gray-900">Admin — Tout biznis</h1>
           <p className="text-sm text-gray-500 mt-1">{businesses.length} biznis enskri</p>
         </div>
-        <a href="/dashboard" className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800">
-          ← Retounen nan aplikasyon
-        </a>
+               <div className="flex gap-2">
+          <a href="/admin/feedback" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap">
+            💬 Feedback
+          </a>
+          <a href="/dashboard" className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm hover:bg-gray-800 whitespace-nowrap">
+            ← Retounen nan aplikasyon
+          </a>
+        </div>
       </div>
 
       {msg && (
