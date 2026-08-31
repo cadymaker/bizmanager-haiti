@@ -12,6 +12,7 @@ import {
   applyQueueToProducts, readQueue, removeFromQueue, markQueueError,
   type QueuedSale,
 } from '@/lib/offline';
+import { beepSuccess, beepError } from '@/lib/beep';
 
 interface Product {
   id: string;
@@ -527,19 +528,23 @@ export default function PosPage() {
 
     const prod = products.find(p => p.barcode && p.barcode === trimmed);
     if (!prod) {
+      beepError();
       setScanMsg({ type: 'error', text: `Pa jwenn okenn pwodwi ak barcode: ${trimmed}` });
       return;
     }
     if (prod.quantity <= 0) {
+      beepError();
       setScanMsg({ type: 'error', text: `${prod.name} — pa gen an stock (fini).` });
       return;
     }
     const existing = cart.find(it => it.product_id === prod.id);
     if (existing && existing.quantity >= prod.quantity) {
+      beepError();
       setScanMsg({ type: 'error', text: `${prod.name} — maksimòm stock rive (${prod.quantity}).` });
       return;
     }
 
+    beepSuccess();
     addToCart(prod);
     setScanMsg({ type: 'success', text: `✓ ${prod.name} ajoute nan panye a` });
   }
@@ -645,7 +650,6 @@ export default function PosPage() {
   const itemCount = cart.reduce((s, it) => s + it.quantity, 0);
   const fmt = (n: number) => formatMoney(n, currency);
 
-  // ===== Kalkile rabè a =====
   function computeDiscount(): { amount: number; type: string | null; value: number } {
     if (discountMode === 'promo' && appliedPromo) {
       const amt = appliedPromo.discount_type === 'percent'
@@ -676,30 +680,33 @@ export default function PosPage() {
   const cashNum = parseFloat(cashGiven) || 0;
   const change = cashNum - total;
 
-  // Aplike yon kòd promo
   function applyPromo() {
     setPromoErr('');
     const code = promoInput.trim().toUpperCase();
     if (!code) return;
 
     const promo = promotions.find(p => p.code.toUpperCase() === code);
-    if (!promo) { setPromoErr('Kòd promo sa a pa egziste.'); return; }
-    if (!promo.is_active) { setPromoErr('Kòd promo sa a pa aktif.'); return; }
+    if (!promo) { beepError(); setPromoErr('Kòd promo sa a pa egziste.'); return; }
+    if (!promo.is_active) { beepError(); setPromoErr('Kòd promo sa a pa aktif.'); return; }
 
     const today = todayLocalDate();
     if (promo.starts_at && today < promo.starts_at) {
+      beepError();
       setPromoErr(`Promo a kòmanse ${promo.starts_at}.`);
       return;
     }
     if (promo.ends_at && today > promo.ends_at) {
+      beepError();
       setPromoErr('Promo sa a fini deja.');
       return;
     }
     if (promo.min_amount && subtotal < Number(promo.min_amount)) {
+      beepError();
       setPromoErr(`Acha a dwe omwen ${fmt(Number(promo.min_amount))} pou promo sa a.`);
       return;
     }
 
+    beepSuccess();
     setAppliedPromo(promo);
     setDiscountMode('promo');
     setPromoInput('');
@@ -853,7 +860,6 @@ export default function PosPage() {
       }
     }
 
-    // Konte itilizasyon promo a
     if (promoCode && appliedPromo) {
       const { data: pr } = await supabase
         .from('promotions')

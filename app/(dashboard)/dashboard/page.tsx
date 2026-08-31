@@ -21,10 +21,26 @@ interface Metrics {
   total_receivables: number;
 }
 
+interface LowStockProduct {
+  id: string;
+  name: string;
+  quantity: number;
+  low_stock_threshold: number | null;
+  purchase_price: number;
+}
+
+const DEFAULT_THRESHOLD = 5;
+function thresholdOf(p: { low_stock_threshold: number | null }): number {
+  return p.low_stock_threshold != null && p.low_stock_threshold > 0
+    ? p.low_stock_threshold
+    : DEFAULT_THRESHOLD;
+}
+
 export default function DashboardPage() {
   const [ownerName, setOwnerName] = useState('');
   const [currency, setCurrency] = useState('HTG');
   const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [lowStock, setLowStock] = useState<LowStockProduct[]>([]);
   const [invoices, setInvoices] = useState<{
     id: string;
     invoice_number: string;
@@ -65,6 +81,18 @@ export default function DashboardPage() {
         .single();
       setMetrics(m as any);
 
+      // Pwodwi ki bezwen rachte (stock ba oswa fini)
+      const { data: prods } = await supabase
+        .from('products')
+        .select('id, name, quantity, low_stock_threshold, purchase_price')
+        .eq('business_id', ctx.businessId)
+        .order('quantity');
+
+      const needRestock = (prods ?? [])
+        .filter((p: any) => p.quantity <= thresholdOf(p))
+        .slice(0, 10);
+      setLowStock(needRestock as any);
+
       const { data: inv } = await supabase
         .from('invoices')
         .select('id, invoice_number, total_amount, balance_due, status, client:clients(name)')
@@ -83,6 +111,8 @@ export default function DashboardPage() {
   const expenses = metrics?.total_expenses ?? 0;
   const stockLoss = metrics?.total_stock_loss ?? 0;
   const netProfit = metrics?.net_profit ?? 0;
+
+  const outOfStockCount = lowStock.filter(p => p.quantity === 0).length;
 
   return (
     <div className="p-6 space-y-6">
@@ -149,6 +179,37 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Rezime finansye (grafik) */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4">
+        <h2 className="font-medium text-gray-800 mb-4">Rezime finansye</h2>
+        <div style={{ width: '100%', height: 260 }}>
+          <ResponsiveContainer>
+            <BarChart
+              data={[
+                { name: 'Vant', valè: sales },
+                { name: 'Kou pwodwi', valè: cogs },
+                { name: 'Depans', valè: expenses },
+                { name: 'Benefis', valè: netProfit },
+              ]}
+              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+            >
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 11 }} width={70}
+                tickFormatter={(v) => new Intl.NumberFormat('fr-HT', { notation: 'compact' }).format(v)} />
+              <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
+              <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
+                {[
+                  '#16a34a', '#6b7280', '#dc2626',
+                  netProfit >= 0 ? '#2563eb' : '#dc2626',
+                ].map((c, i) => (
+                  <Cell key={i} fill={c} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Detay kalkil benefis */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">
         <h2 className="font-medium text-gray-800 mb-3">Kijan benefis nèt la kalkile</h2>
@@ -188,36 +249,7 @@ export default function DashboardPage() {
         </p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h2 className="font-medium text-gray-800 mb-4">Rezime finansye</h2>
-        <div style={{ width: '100%', height: 260 }}>
-          <ResponsiveContainer>
-            <BarChart
-              data={[
-                { name: 'Vant', valè: sales },
-                { name: 'Kou pwodwi', valè: cogs },
-                { name: 'Depans', valè: expenses },
-                { name: 'Benefis', valè: netProfit },
-              ]}
-              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-            >
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 11 }} width={70}
-                tickFormatter={(v) => new Intl.NumberFormat('fr-HT', { notation: 'compact' }).format(v)} />
-              <Tooltip formatter={(v: any) => fmt(Number(v))} cursor={false} />
-              <Bar dataKey="valè" radius={[6, 6, 0, 0]}>
-                {[
-                  '#16a34a', '#6b7280', '#dc2626',
-                  netProfit >= 0 ? '#2563eb' : '#dc2626',
-                ].map((c, i) => (
-                  <Cell key={i} fill={c} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
+      {/* Fakti resan */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div className="px-4 py-3 border-b border-gray-100 flex justify-between items-center">
           <h2 className="font-medium text-gray-800">Fakti resan</h2>
@@ -268,6 +300,46 @@ export default function DashboardPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pwodwi pou rachte */}
+      {lowStock.length > 0 && (
+        <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
+          <div className="px-4 py-3 bg-orange-50 border-b border-orange-200 flex justify-between items-center">
+            <div>
+              <h2 className="font-medium text-orange-800">📦 Pwodwi pou rachte</h2>
+              <p className="text-xs text-orange-600 mt-0.5">
+                {outOfStockCount > 0
+                  ? `${outOfStockCount} pwodwi fini nèt, ${lowStock.length - outOfStockCount} prèske fini.`
+                  : `${lowStock.length} pwodwi prèske fini.`}
+              </p>
+            </div>
+            <a href="/inventory" className="text-sm text-orange-700 hover:underline font-medium whitespace-nowrap">
+              Wè envantè →
+            </a>
+          </div>
+          <div className="divide-y divide-gray-100">
+            {lowStock.map(p => (
+              <div key={p.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-medium text-sm text-gray-800 truncate">{p.name}</div>
+                  <div className="text-xs text-gray-400">
+                    Alèt lè stock ≤ {thresholdOf(p)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 flex-shrink-0">
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                    p.quantity === 0
+                      ? 'bg-red-100 text-red-700'
+                      : 'bg-orange-100 text-orange-700'
+                  }`}>
+                    {p.quantity === 0 ? 'Fini ❌' : `${p.quantity} rete ⚠️`}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

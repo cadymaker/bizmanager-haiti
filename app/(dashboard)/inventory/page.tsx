@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { formatMoney } from '@/lib/currency';
+import { queueCount } from '@/lib/offline';
 
 interface Product {
   id: string;
@@ -14,6 +15,7 @@ interface Product {
   quantity: number;
   image_url: string | null;
   barcode: string | null;
+  low_stock_threshold: number | null;
 }
 
 interface Adjustment {
@@ -33,6 +35,13 @@ const REASONS = [
   { value: 'other', label: 'Lòt rezon' },
 ];
 
+const DEFAULT_THRESHOLD = 5;
+function thresholdOf(p: { low_stock_threshold: number | null }): number {
+  return p.low_stock_threshold != null && p.low_stock_threshold > 0
+    ? p.low_stock_threshold
+    : DEFAULT_THRESHOLD;
+}
+
 function fmtDate(iso: string): string {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -47,17 +56,15 @@ export default function InventoryPage() {
   const [msg, setMsg] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [pendingSales, setPendingSales] = useState(0);
 
-  // Eskane ak kamera
   const [showScanner, setShowScanner] = useState(false);
   const [scannerError, setScannerError] = useState('');
   const scannerRef = useRef<any>(null);
   const handledRef = useRef(false);
 
-  // Apèsi barcode (jenere / enprime etikèt)
   const barcodeSvgRef = useRef<SVGSVGElement>(null);
 
-  // Ajisteman stock (pèdi / gate / ekspire)
   const [adjustProduct, setAdjustProduct] = useState<Product | null>(null);
   const [adjustQty, setAdjustQty] = useState('');
   const [adjustReason, setAdjustReason] = useState('lost');
@@ -65,7 +72,6 @@ export default function InventoryPage() {
   const [adjustBusy, setAdjustBusy] = useState(false);
   const [adjustErr, setAdjustErr] = useState('');
 
-  // Istorik pèt
   const [showHistory, setShowHistory] = useState(false);
   const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -73,6 +79,7 @@ export default function InventoryPage() {
   const [form, setForm] = useState({
     name: '', category: '', description: '',
     purchase_price: '', sale_price: '', quantity: '', image_url: '', barcode: '',
+    low_stock_threshold: '',
   });
 
   useEffect(() => { load(); }, []);
@@ -96,11 +103,16 @@ export default function InventoryPage() {
       .eq('business_id', ctx.businessId)
       .order('name');
     setProducts(data ?? []);
+
+    setPendingSales(queueCount(ctx.businessId));
     setLoading(false);
   }
 
   function resetForm() {
-    setForm({ name: '', category: '', description: '', purchase_price: '', sale_price: '', quantity: '', image_url: '', barcode: '' });
+    setForm({
+      name: '', category: '', description: '', purchase_price: '', sale_price: '',
+      quantity: '', image_url: '', barcode: '', low_stock_threshold: '',
+    });
     setEditId(null);
     setShowForm(false);
   }
@@ -115,6 +127,7 @@ export default function InventoryPage() {
       quantity: String(p.quantity),
       image_url: p.image_url ?? '',
       barcode: p.barcode ?? '',
+      low_stock_threshold: p.low_stock_threshold != null ? String(p.low_stock_threshold) : '',
     });
     setEditId(p.id);
     setShowForm(true);
@@ -152,13 +165,12 @@ export default function InventoryPage() {
     setUploading(false);
   }
 
-  // ===== Jenere barcode pou pwodwi lokal =====
   function generateBarcode() {
     let code = '';
     let attempts = 0;
     do {
-      const rand = Math.floor(100000 + Math.random() * 900000); // 6 chif
-      code = '20' + rand; // prefiks 20 = kòd entèn (pwodwi lokal)
+      const rand = Math.floor(100000 + Math.random() * 900000);
+      code = '20' + rand;
       attempts++;
     } while (products.some(p => p.barcode === code) && attempts < 30);
 
@@ -167,7 +179,6 @@ export default function InventoryPage() {
     setTimeout(() => setMsg(''), 3000);
   }
 
-  // Desine apèsi barcode la lè kòd la chanje
   useEffect(() => {
     const code = form.barcode.trim();
     if (!code || !barcodeSvgRef.current) return;
@@ -192,7 +203,6 @@ export default function InventoryPage() {
     return () => { cancelled = true; };
   }, [form.barcode]);
 
-  // Enprime yon etikèt ak barcode a
   function printLabel() {
     const code = form.barcode.trim();
     if (!code || !barcodeSvgRef.current) return;
@@ -216,17 +226,15 @@ export default function InventoryPage() {
     setTimeout(() => { win.print(); win.close(); }, 400);
   }
 
-  // ===== Eskane ak kamera =====
   function openScanner() {
     setScannerError('');
     handledRef.current = false;
     setShowScanner(true);
   }
   function closeScanner() {
-    setShowScanner(false); // netwayaj effect la ap fèmen kamera a
+    setShowScanner(false);
   }
 
-  // Demare kamera a lè modal la louvri
   useEffect(() => {
     if (!showScanner) return;
     let active = true;
@@ -238,10 +246,9 @@ export default function InventoryPage() {
         const scanner = new Html5Qrcode('barcode-scanner-region');
         scannerRef.current = scanner;
         await scanner.start(
-          { facingMode: 'environment' }, // kamera dèyè a
+          { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 280, height: 160 } },
           (decodedText: string) => {
-            // Pran sèlman premye eskan reyisi a, epi fèmen
             if (handledRef.current) return;
             handledRef.current = true;
             if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -252,7 +259,7 @@ export default function InventoryPage() {
             setTimeout(() => setMsg(''), 3000);
             setShowScanner(false);
           },
-          () => { /* inyore erè pa fram (nòmal) */ }
+          () => { /* inyore erè pa fram */ }
         );
       } catch (err: any) {
         if (active) {
@@ -274,7 +281,6 @@ export default function InventoryPage() {
     };
   }, [showScanner]);
 
-  // ===== Ajisteman stock (pèdi / gate / ekspire) =====
   function openAdjust(p: Product) {
     setAdjustProduct(p);
     setAdjustQty('');
@@ -286,7 +292,6 @@ export default function InventoryPage() {
     setAdjustProduct(null);
   }
 
-  // Chaje istorik pèt yo
   async function openHistory() {
     setShowHistory(true);
     setHistoryLoading(true);
@@ -328,7 +333,6 @@ export default function InventoryPage() {
     const ctx = await getBusinessContext();
     if (!ctx) { setAdjustBusy(false); return; }
 
-    // 1) Anrejistre tras la
     const { error: adjErr } = await supabase.from('stock_adjustments').insert({
       business_id: ctx.businessId,
       product_id: adjustProduct.id,
@@ -347,7 +351,6 @@ export default function InventoryPage() {
       return;
     }
 
-    // 2) Desann stock la
     const { error: prodErr } = await supabase
       .from('products')
       .update({ quantity: adjustProduct.quantity - adjustQtyNum })
@@ -385,6 +388,9 @@ export default function InventoryPage() {
       quantity: parseInt(form.quantity) || 0,
       image_url: form.image_url || null,
       barcode: form.barcode.trim() || null,
+      low_stock_threshold: form.low_stock_threshold
+        ? parseInt(form.low_stock_threshold)
+        : null,
     };
 
     let error;
@@ -414,7 +420,7 @@ export default function InventoryPage() {
   const fmt = (n: number) => formatMoney(n, currency);
 
   const totalValue = products.reduce((s, p) => s + p.sale_price * p.quantity, 0);
-  const lowStock = products.filter(p => p.quantity >= 1 && p.quantity <= 5).length;
+  const lowStock = products.filter(p => p.quantity >= 1 && p.quantity <= thresholdOf(p)).length;
   const outOfStock = products.filter(p => p.quantity === 0).length;
   const totalVarieties = products.length;
   const totalItems = products.reduce((s, p) => s + p.quantity, 0);
@@ -437,13 +443,23 @@ export default function InventoryPage() {
 
       {msg && <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>}
 
+      {pendingSales > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800 flex items-center justify-between gap-2">
+          <span>
+            ⚠️ Gen <strong>{pendingSales}</strong> vant POS ki poko sinkronize.
+            Stock ki afiche isit la ka pi wo pase reyalite a.
+          </span>
+          <a href="/pos" className="underline font-medium whitespace-nowrap">Ale nan POS →</a>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Valè total stock (vant)</p>
           <p className="text-xl font-semibold mt-1">{fmt(totalValue)}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <p className="text-xs text-gray-500 uppercase tracking-wide">Pwodwi ki prèske fini (1-5)</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide">Pwodwi ki prèske fini</p>
           <p className={`text-xl font-semibold mt-1 ${lowStock > 0 ? 'text-orange-600' : 'text-green-600'}`}>{lowStock}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
@@ -485,7 +501,6 @@ export default function InventoryPage() {
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm"
             value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
 
-          {/* Chan Barcode: eskane / tape / jenere + apèsi */}
           <div>
             <label className="text-xs text-gray-500 font-medium">Barcode (opsyonèl)</label>
             <div className="flex gap-2 mt-1">
@@ -505,7 +520,6 @@ export default function InventoryPage() {
               Pwodwi enpòte: eskane oswa tape barcode faktori a. Pwodwi lokal san barcode: klike "Jenere".
             </p>
 
-            {/* Apèsi barcode + enprime etikèt */}
             {form.barcode.trim() && (
               <div className="mt-3 border border-gray-200 rounded-lg p-3 flex flex-col items-center gap-2 bg-gray-50">
                 <svg ref={barcodeSvgRef} />
@@ -537,6 +551,18 @@ export default function InventoryPage() {
                 value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
             </div>
           </div>
+
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Alèt stock ba (opsyonèl)</label>
+            <input type="number" placeholder={`Default: ${DEFAULT_THRESHOLD}`}
+              className="w-full mt-1 px-3 py-2 border border-gray-200 rounded-lg text-sm"
+              value={form.low_stock_threshold}
+              onChange={e => setForm({ ...form, low_stock_threshold: e.target.value })} />
+            <p className="text-xs text-gray-400 mt-1">
+              Lè stock la rive nan chif sa a oswa anba, w ap jwenn yon alèt. Kite vid pou itilize {DEFAULT_THRESHOLD}.
+            </p>
+          </div>
+
           <button type="submit" disabled={uploading}
             className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
             {editId ? 'Anrejistre chanjman' : 'Ajoute pwodwi a'}
@@ -590,11 +616,14 @@ export default function InventoryPage() {
                 <td className="px-4 py-3">
                   <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                     p.quantity === 0 ? 'bg-red-100 text-red-700' :
-                    p.quantity <= 5 ? 'bg-orange-100 text-orange-700' :
+                    p.quantity <= thresholdOf(p) ? 'bg-orange-100 text-orange-700' :
                     'bg-green-100 text-green-700'
                   }`}>
-                    {p.quantity} {p.quantity === 0 ? '❌' : p.quantity <= 5 ? '⚠️' : ''}
+                    {p.quantity} {p.quantity === 0 ? '❌' : p.quantity <= thresholdOf(p) ? '⚠️' : ''}
                   </span>
+                  {p.low_stock_threshold != null && p.low_stock_threshold > 0 && (
+                    <div className="text-xs text-gray-400 mt-0.5">alèt: {p.low_stock_threshold}</div>
+                  )}
                 </td>
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
@@ -684,7 +713,7 @@ export default function InventoryPage() {
               )}
             </div>
 
-           {!historyLoading && adjustments.length > 0 && (
+            {!historyLoading && adjustments.length > 0 && (
               <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 flex flex-col sm:flex-row justify-between gap-2 text-sm">
                 <span className="text-gray-600">
                   <strong className="text-gray-900">{adjustments.length}</strong> pèt anrejistre
@@ -754,7 +783,6 @@ export default function InventoryPage() {
               className="w-full mt-1 mb-3 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
             />
 
-            {/* Valè pèt la */}
             {!isNaN(adjustQtyNum) && adjustQtyNum > 0 && (
               <div className="flex justify-between items-center bg-red-50 rounded-lg px-4 py-2.5 mb-3">
                 <span className="text-sm text-red-700 font-medium">Valè pèt la</span>
