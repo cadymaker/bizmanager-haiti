@@ -9,6 +9,8 @@ interface Metrics {
   total_sales: number;
   total_cash_received: number;
   total_investments: number;
+  total_merchandise: number;
+  total_capital: number;
   total_expenses: number;
   total_stock_value: number;
   total_stock_cost: number;
@@ -118,7 +120,12 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Envestisman</p>
           <p className="text-lg sm:text-xl font-semibold mt-1">{fmt(metrics?.total_investments ?? 0)}</p>
-          <p className="text-xs text-gray-400 mt-1">Acha machandiz/kapital</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Machandiz: {fmt(metrics?.total_merchandise ?? 0)}
+          </p>
+          <p className="text-xs text-gray-400">
+            Kapital: {fmt(metrics?.total_capital ?? 0)}
+          </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4">
           <p className="text-xs text-gray-500 uppercase tracking-wide">Depans</p>
@@ -176,8 +183,8 @@ export default function DashboardPage() {
           </div>
         </div>
         <p className="text-xs text-gray-400 mt-3">
-          Envestisman (acha machandiz, kapital) pa antre nan kalkil sa a — acha machandiz konte
-          kòm kou lè pwodwi a vann.
+          Envestisman pa antre nan kalkil sa a — acha machandiz konte kòm kou lè pwodwi a
+          vann, epi kapital se yon bagay ki rete nan biznis la.
         </p>
       </div>
 
