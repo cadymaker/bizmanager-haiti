@@ -16,6 +16,8 @@ interface InvoiceFull {
   balance_due: number;
   status: string;
   currency: string;
+  discount_amount?: number;
+  promo_code?: string | null;
   metadata: { items?: Item[]; discount?: number };
   client: { name?: string; phone?: string; address?: string } | null;
   client_id?: string | null;
@@ -76,7 +78,7 @@ export default function InvoiceDetailPage() {
 
     const { data: inv } = await supabase
       .from('invoices')
-      .select('id, invoice_number, issue_date, total_amount, amount_paid, balance_due, status, currency, metadata, client_id, client:clients(name, phone, address)')
+            .select('id, invoice_number, issue_date, total_amount, amount_paid, balance_due, status, currency, discount_amount, promo_code, metadata, client_id, client:clients(name, phone, address)')
       .eq('id', id)
       .single();
     setInvoice(inv as any);
@@ -232,11 +234,14 @@ export default function InvoiceDetailPage() {
     // 4) Mete fakti a ajou (SAN balance_due — Postgres kalkile l otomatikman)
     const { error } = await supabase
       .from('invoices')
-      .update({
+                 .update({
         client_id: eClientId || null,
         subtotal: rawTotal,
         total_amount: finalTotal,
         status: newStatus,
+        discount_amount: eDiscount,
+        discount_type: eDiscount > 0 ? 'fixed' : null,
+        discount_value: eDiscount,
         metadata: {
           items: validItems.map(it => ({
             name: it.name,
@@ -351,7 +356,11 @@ export default function InvoiceDetailPage() {
       const money = (n: number) => clean(fmt(n));
 
       const items = invoice.metadata?.items ?? [];
-      const discount = invoice.metadata?.discount ?? 0;
+            const discount = Number(
+        invoice.discount_amount && invoice.discount_amount > 0
+          ? invoice.discount_amount
+          : invoice.metadata?.discount ?? 0
+      );
 
       const draw = (pdf: any): number => {
         const setColor = (c: number[]) => pdf.setTextColor(c[0], c[1], c[2]);
@@ -451,7 +460,11 @@ export default function InvoiceDetailPage() {
         };
         if (discount > 0) {
           line('Sou-total', money(invoice.total_amount + discount), { color: [107, 114, 128] });
-          line('Rabè', '- ' + money(discount), { color: [22, 163, 74] });
+                    line(
+            invoice.promo_code ? `Rabè (${invoice.promo_code})` : 'Rabè',
+            '- ' + money(discount),
+            { color: [22, 163, 74] }
+          );
         }
         pdf.setDrawColor(209, 213, 219); pdf.setLineWidth(0.3);
         pdf.line(labelX, ty - 3.5, rightX, ty - 3.5);
@@ -490,6 +503,13 @@ export default function InvoiceDetailPage() {
 
   const fmt = (n: number) => formatMoney(n, invoice?.currency);
   const sym = currencySymbol(invoice?.currency);
+
+    // Rabè a: nan kolòn nan (nouvo fakti) oswa nan metadata (ansyen fakti)
+  const invoiceDiscount = Number(
+    invoice?.discount_amount && invoice.discount_amount > 0
+      ? invoice.discount_amount
+      : invoice?.metadata?.discount ?? 0
+  );
 
   if (loading) return <div className="p-6 text-gray-400">Chajman...</div>;
   if (!invoice) return <div className="p-6 text-gray-400">Fakti pa jwenn.</div>;
@@ -693,15 +713,15 @@ export default function InvoiceDetailPage() {
 
         <div className="flex justify-end">
           <div className="w-64 space-y-1 text-sm">
-            {(invoice.metadata?.discount ?? 0) > 0 && (
+                     {invoiceDiscount > 0 && (
               <>
                 <div className="flex justify-between text-gray-600">
                   <span>Sou-total</span>
-                  <span>{fmt(invoice.total_amount + (invoice.metadata?.discount ?? 0))}</span>
+                  <span>{fmt(invoice.total_amount + invoiceDiscount)}</span>
                 </div>
                 <div className="flex justify-between text-green-600">
-                  <span>Rabè</span>
-                  <span>- {fmt(invoice.metadata?.discount ?? 0)}</span>
+                  <span>Rabè{invoice.promo_code ? ` (${invoice.promo_code})` : ''}</span>
+                  <span>- {fmt(invoiceDiscount)}</span>
                 </div>
               </>
             )}
