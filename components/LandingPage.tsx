@@ -10,7 +10,7 @@ const FEATURES = [
   {
     icon: '📴',
     title: 'Mache san entènèt',
-    desc: 'Kontinye vann menm lè koneksyon an koupe. Vant yo sinkronize otomatikman lè entènèt tounen.',
+    desc: 'Kontinye vann menm lè koneksyon an koupe. Vant yo senkronize otomatikman lè entènèt tounen.',
   },
   {
     icon: '💰',
@@ -30,7 +30,7 @@ const FEATURES = [
   {
     icon: '📊',
     title: 'Rapò ak benefis',
-    desc: 'Wè vant, kou pwodwi, depans, pèt, ak vrè benefis nèt ou, pa yon chif apeprè.',
+    desc: 'Wè vant, kou pwodwi, depans, pèt, ak vrè benefis nèt ou — pa yon chif apeprè.',
   },
   {
     icon: '🎟️',
@@ -61,7 +61,7 @@ const FAQ = [
   },
   {
     q: 'Èske m ka teste anvan m peye?',
-    a: 'Wi. Ou gen 14 jou gratis ak tout fonksyonalite yo. Pa gen kat kredi pou antre, jis kreye kont ou epi kòmanse.',
+    a: 'Wi. Ou gen 14 jou gratis ak tout fonksyonalite yo. Pa gen kat kredi pou antre — jis kreye kont ou epi kòmanse.',
   },
   {
     q: 'Kijan pou m peye?',
@@ -77,40 +77,83 @@ const FAQ = [
   },
 ];
 
-// Mockup telefòn nan POS la (SVG — pa gen fichye imaj)
+// Done estriktire pou Google
+const APP_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'BizManager Haiti',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Android, iOS, Web',
+  description:
+    'Lojisyèl POS ak jesyon pou biznis an Ayiti. Vant ak barcode, kès, stock, fakti, ak rapò mache menm san entènèt.',
+  url: 'https://www.bizmanagerhaiti.com',
+  inLanguage: 'ht',
+  offers: {
+    '@type': 'Offer',
+    price: '1000',
+    priceCurrency: 'HTG',
+    description: 'Lisans 30 jou. Esè gratis 14 jou.',
+  },
+  featureList: [
+    'Sistèm vant (POS) ak eskanè barcode',
+    'Mache san entènèt (offline)',
+    'Balans kès ak Rapò Z',
+    'Jesyon envantè ak alèt stock',
+    'Fakti ak dèt kliyan',
+    'Rapò ak analiz benefis',
+  ],
+  provider: {
+    '@type': 'Organization',
+    name: 'BizManager Haiti',
+    url: 'https://www.bizmanagerhaiti.com',
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Gonaïves',
+      addressCountry: 'HT',
+    },
+  },
+};
+
+const FAQ_SCHEMA = {
+  '@context': 'https://schema.org',
+  '@type': 'FAQPage',
+  mainEntity: FAQ.map(item => ({
+    '@type': 'Question',
+    name: item.q,
+    acceptedAnswer: {
+      '@type': 'Answer',
+      text: item.a,
+    },
+  })),
+};
+
+// Mockup telefòn nan POS la (SVG)
 function PhoneMockup() {
   return (
     <svg viewBox="0 0 280 560" className="w-full h-auto drop-shadow-2xl" aria-hidden="true">
-      {/* Kò telefòn nan */}
       <rect x="10" y="10" width="260" height="540" rx="34" fill="#111827" />
       <rect x="18" y="18" width="244" height="524" rx="28" fill="#ffffff" />
-      {/* Ti bar anwo */}
       <rect x="110" y="26" width="60" height="6" rx="3" fill="#111827" />
 
-      {/* Antèt POS */}
-      <text x="34" y="66" fontSize="13" fontWeight="700" fill="#111827">Sistèm Vant</text>
+      <text x="34" y="66" fontSize="13" fontWeight="700" fill="#111827">Sistem Vant</text>
       <rect x="150" y="54" width="52" height="16" rx="8" fill="#d1fae5" />
-      <text x="158" y="66" fontSize="8" fill="#047857">● An liy</text>
+      <text x="158" y="66" fontSize="8" fill="#047857">An liy</text>
       <rect x="208" y="54" width="46" height="16" rx="8" fill="#fef3c7" />
-      <text x="214" y="66" fontSize="8" fill="#92400e">🔒 Kès</text>
+      <text x="216" y="66" fontSize="8" fill="#92400e">Kes</text>
 
-      {/* Ban kès louvri */}
       <rect x="30" y="78" width="220" height="26" rx="8" fill="#ecfdf5" stroke="#a7f3d0" />
       <circle cx="42" cy="91" r="3.5" fill="#10b981" />
-      <text x="52" y="95" fontSize="9" fill="#047857">Kès louvri</text>
+      <text x="52" y="95" fontSize="9" fill="#047857">Kes louvri</text>
       <text x="160" y="95" fontSize="9" fontWeight="600" fill="#065f46">12 400 HTG</text>
 
-      {/* Chan barcode */}
       <rect x="30" y="112" width="164" height="28" rx="8" fill="#fff" stroke="#c7d2fe" strokeWidth="2" />
       <text x="40" y="130" fontSize="8.5" fill="#9ca3af">Eskane barcode...</text>
       <rect x="200" y="112" width="50" height="28" rx="8" fill="#4f46e5" />
       <text x="212" y="130" fontSize="9" fill="#fff">Ajoute</text>
 
-      {/* Bouton kamera */}
       <rect x="30" y="148" width="220" height="26" rx="8" fill="#eef2ff" stroke="#c7d2fe" />
-      <text x="93" y="165" fontSize="9" fill="#4338ca">📷 Eskane ak kamera</text>
+      <text x="88" y="165" fontSize="9" fill="#4338ca">Eskane ak kamera</text>
 
-      {/* Grid pwodwi */}
       {[0, 1, 2, 3].map(i => {
         const x = 30 + (i % 2) * 114;
         const y = 186 + Math.floor(i / 2) * 96;
@@ -124,7 +167,6 @@ function PhoneMockup() {
         );
       })}
 
-      {/* Panye */}
       <rect x="30" y="384" width="220" height="1" fill="#e5e7eb" />
       <text x="30" y="406" fontSize="10" fontWeight="600" fill="#111827">Panye (3)</text>
 
@@ -136,12 +178,10 @@ function PhoneMockup() {
         </g>
       ))}
 
-      {/* Total */}
       <rect x="30" y="482" width="220" height="1" fill="#e5e7eb" />
       <text x="30" y="504" fontSize="10" fill="#6b7280">Total</text>
       <text x="250" y="506" fontSize="15" fontWeight="700" fill="#111827" textAnchor="end">3 250 HTG</text>
 
-      {/* Bouton peman */}
       <rect x="30" y="514" width="220" height="30" rx="10" fill="#16a34a" />
       <text x="140" y="534" fontSize="11" fontWeight="600" fill="#fff" textAnchor="middle">
         Kontinye ak peman
@@ -150,30 +190,28 @@ function PhoneMockup() {
   );
 }
 
-// Ilistrasyon offline (SVG)
+// Ilistrasyon sinkronizasyon offline
 function OfflineIllustration() {
   return (
     <svg viewBox="0 0 400 220" className="w-full h-auto" aria-hidden="true">
-      {/* Telefòn */}
       <rect x="30" y="30" width="110" height="160" rx="16" fill="#1e40af" />
       <rect x="38" y="38" width="94" height="144" rx="12" fill="#fff" />
       <rect x="50" y="56" width="70" height="8" rx="4" fill="#e5e7eb" />
       <rect x="50" y="72" width="50" height="8" rx="4" fill="#e5e7eb" />
       <rect x="50" y="96" width="70" height="24" rx="6" fill="#fed7aa" />
-      <text x="58" y="112" fontSize="9" fill="#9a3412">⚠ Offline</text>
+      <text x="60" y="112" fontSize="9" fill="#9a3412">Offline</text>
       <rect x="50" y="130" width="70" height="10" rx="5" fill="#dbeafe" />
       <rect x="50" y="146" width="70" height="10" rx="5" fill="#dbeafe" />
 
-      {/* Flèch sinkronizasyon */}
       <path d="M 160 110 L 230 110" stroke="#3b82f6" strokeWidth="3" strokeDasharray="8 6" />
       <path d="M 224 103 L 232 110 L 224 117" stroke="#3b82f6" strokeWidth="3" fill="none" strokeLinecap="round" strokeLinejoin="round" />
       <text x="195" y="98" fontSize="11" fill="#3b82f6" textAnchor="middle" fontWeight="600">sync</text>
 
-      {/* Nyaj (sèvè) */}
       <ellipse cx="310" cy="115" rx="60" ry="38" fill="#dbeafe" />
       <ellipse cx="285" cy="105" rx="32" ry="26" fill="#dbeafe" />
       <ellipse cx="335" cy="105" rx="28" ry="22" fill="#dbeafe" />
-      <text x="310" y="122" fontSize="24" textAnchor="middle">☁️</text>
+      <circle cx="310" cy="112" r="14" fill="#3b82f6" />
+      <path d="M 303 112 L 308 117 L 318 106" stroke="#fff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -181,7 +219,6 @@ function OfflineIllustration() {
 export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
-  // Fòm kontak
   const [form, setForm] = useState({
     name: '', phone: '', email: '', business_name: '', message: '',
   });
@@ -213,14 +250,24 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* ===== ANTÈT ===== */}
+      {/* Done estriktire pou Google */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(APP_SCHEMA) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }}
+      />
+
+      {/* ===== ANTET ===== */}
       <header className="border-b border-gray-100 sticky top-0 bg-white/90 backdrop-blur-md z-40">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <img src="/icon-192.png" alt="BizManager Haiti" className="w-9 h-9 rounded-lg" />
             <div className="leading-tight">
               <p className="font-bold text-gray-900 text-base">BizManager</p>
-              <p className="text-[10px] text-gray-500 tracking-wide">HAITI 🇭🇹</p>
+              <p className="text-[10px] text-gray-500 tracking-wide">HAITI</p>
             </div>
           </div>
           <div className="flex items-center gap-1 sm:gap-2">
@@ -234,7 +281,7 @@ export default function LandingPage() {
             </a>
             <a href="/register"
               className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap shadow-sm">
-              Kòmanse gratis
+              Komanse gratis
             </a>
           </div>
         </div>
@@ -247,12 +294,12 @@ export default function LandingPage() {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
               <div className="inline-flex items-center gap-2 bg-green-50 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium border border-green-100">
-                ✓ 14 jou gratis — pa gen kat kredi
+                14 jou gratis — pa gen kat kredi
               </div>
 
               <h1 className="text-4xl sm:text-5xl font-bold text-gray-900 leading-[1.1] mt-6">
                 Jere biznis ou
-                <span className="text-blue-600"> san tèt chaje</span>
+                <span className="text-blue-600"> san tet chaje</span>
               </h1>
 
               <p className="text-lg text-gray-600 mt-5 leading-relaxed">
@@ -263,23 +310,23 @@ export default function LandingPage() {
 
               <div className="flex flex-col sm:flex-row gap-3 mt-8">
                 <a href="/register"
-                  className="px-7 py-3.5 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 text-center shadow-lg shadow-blue-600/20 transition-all hover:shadow-xl hover:shadow-blue-600/25">
-                  Kreye kont gratis →
+                  className="px-7 py-3.5 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 text-center shadow-lg shadow-blue-600/20 transition-all hover:shadow-xl">
+                  Kreye kont gratis
                 </a>
                 <a href="#kontak"
                   className="px-7 py-3.5 bg-white text-gray-800 border border-gray-200 rounded-xl text-base font-semibold hover:bg-gray-50 text-center transition-colors">
-                  Ekri nou yon mesaj
+                  Voye nou yon mesaj
                 </a>
               </div>
 
               <div className="flex flex-wrap gap-x-6 gap-y-2 mt-8 text-sm text-gray-500">
-                <span className="flex items-center gap-1.5">📱 Mache sou telefòn</span>
-                <span className="flex items-center gap-1.5">🇭🇹 Tout an Kreyòl</span>
-                <span className="flex items-center gap-1.5">📴 Mache offline</span>
+                <span>Mache sou telefon</span>
+                <span>Tout an Kreyol</span>
+                <span>Mache offline</span>
               </div>
             </div>
 
-                       <div className="flex justify-center mt-4 lg:mt-0">
+            <div className="flex justify-center mt-4 lg:mt-0">
               <div className="w-[220px] sm:w-[250px] lg:w-[280px]">
                 <PhoneMockup />
               </div>
@@ -288,7 +335,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== PWOBLÈM ===== */}
+      {/* ===== PWOBLEM ===== */}
       <section className="bg-gray-50 border-y border-gray-100">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
           <div className="text-center max-w-2xl mx-auto">
@@ -300,25 +347,20 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-10">
             {[
               {
-                emoji: '😓',
                 title: 'Kès la pa balanse',
                 desc: 'Nan fen jounen an, ou pa konnen si kòb la konplè oswa si gen yon bagay ki manke.',
               },
               {
-                emoji: '📉',
                 title: 'Ou pa konnen vrè benefis ou',
                 desc: 'Ou wè kòb ap antre, men ou pa sèten si w ap fè pwofi apre tout depans yo.',
               },
               {
-                emoji: '📵',
                 title: 'Entènèt la koupe',
                 desc: 'Lòt sistèm bloke nèt lè koneksyon an ale. Ou pa ka vann, kliyan an ap tann.',
               },
             ].map((p, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center text-2xl">
-                  {p.emoji}
-                </div>
+                <div className="w-10 h-1.5 rounded-full bg-blue-600" />
                 <h3 className="font-semibold text-gray-900 mt-4">{p.title}</h3>
                 <p className="text-sm text-gray-600 mt-2 leading-relaxed">{p.desc}</p>
               </div>
@@ -336,7 +378,7 @@ export default function LandingPage() {
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Fonksyonalite</p>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-            Tout sa yon bizniz bezwen
+            Tout sa yon biznis bezwen
           </h2>
           <p className="text-gray-600 mt-3">
             Pa gen bagay konplike. Chak fonksyonalite fèt pou reyalite biznis an Ayiti.
@@ -376,7 +418,7 @@ export default function LandingPage() {
               <div className="flex flex-wrap gap-3 mt-7">
                 {['Eskane barcode', 'Fè vant', 'Bay resi', 'Senkronize otomatikman'].map((t, i) => (
                   <span key={i} className="bg-white/15 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur">
-                    ✓ {t}
+                    {t}
                   </span>
                 ))}
               </div>
@@ -404,19 +446,19 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-12 max-w-3xl mx-auto">
           {PRICING.map((p, i) => (
             <div key={i}
-              className={`rounded-2xl p-6 text-center relative bg-white transition-transform ${
+              className={`rounded-2xl p-6 text-center relative bg-white ${
                 p.popular
                   ? 'border-2 border-blue-600 shadow-xl shadow-blue-600/10 sm:scale-105'
                   : 'border border-gray-200'
               }`}>
               {p.popular && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                  Pi popilè
+                  Pi popile
                 </span>
               )}
               {p.best && (
                 <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                  Pi bon valè
+                  Pi bon vale
                 </span>
               )}
               <p className="text-sm text-gray-500 uppercase tracking-wide">{p.duration}</p>
@@ -435,7 +477,7 @@ export default function LandingPage() {
         <div className="text-center mt-8">
           <a href="/register"
             className="inline-block px-8 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 shadow-lg shadow-blue-600/20">
-            Kòmanse 14 jou gratis →
+            Kòmanse 14 jou gratis
           </a>
         </div>
       </section>
@@ -459,7 +501,7 @@ export default function LandingPage() {
                 >
                   <span className="text-sm font-medium text-gray-800">{item.q}</span>
                   <span className="text-gray-400 text-xl flex-shrink-0 leading-none">
-                    {openFaq === i ? '−' : '+'}
+                    {openFaq === i ? '-' : '+'}
                   </span>
                 </button>
                 {openFaq === i && (
@@ -488,14 +530,12 @@ export default function LandingPage() {
 
             <div className="mt-8 space-y-4">
               {[
-                { icon: '⚡', title: 'Repons rapid', desc: 'N ap reponn ou nan mwens pase 24 è.' },
-                { icon: '🎯', title: 'Konsèy san angajman', desc: 'N ap di w onètman si app la bon pou ou.' },
-                { icon: '🇭🇹', title: 'Ekip lokal', desc: 'Nou baze an Ayiti, nou konnen reyalite a.' },
+                { title: 'Repons rapid', desc: 'N ap reponn ou nan mwens pase 24 è.' },
+                { title: 'Konsèy san angajman', desc: 'N ap di w onètman si app la bon pou ou.' },
+                { title: 'Ekip lokal', desc: 'Nou baze an Ayiti, nou konnen reyalite a.' },
               ].map((it, i) => (
                 <div key={i} className="flex gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-lg flex-shrink-0">
-                    {it.icon}
-                  </div>
+                  <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900 text-sm">{it.title}</p>
                     <p className="text-sm text-gray-600">{it.desc}</p>
@@ -508,8 +548,7 @@ export default function LandingPage() {
           <div>
             {sent ? (
               <div className="bg-green-50 border border-green-200 rounded-2xl p-8 text-center h-full flex flex-col justify-center">
-                <p className="text-4xl">✓</p>
-                <p className="text-lg font-semibold text-green-800 mt-3">Mèsi!</p>
+                <p className="text-lg font-semibold text-green-800">Mèsi!</p>
                 <p className="text-sm text-green-600 mt-2">
                   Nou resevwa mesaj ou. N ap reponn ou byen vit.
                 </p>
@@ -575,18 +614,18 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== APÈL FINAL ===== */}
+      {/* ===== APEL FINAL ===== */}
       <section className="bg-gray-900">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-white">
-            Pare pou pran kontwòl biznis ou?
+            Pare pou pran kontròl biznis ou?
           </h2>
           <p className="text-gray-400 mt-3">
             Kreye kont ou nan de minit. Pa gen kat kredi, pa gen angajman.
           </p>
           <a href="/register"
             className="inline-block mt-8 px-8 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 shadow-lg shadow-blue-600/25">
-            Kreye kont gratis →
+            Kreye kont gratis
           </a>
         </div>
       </section>
@@ -601,7 +640,7 @@ export default function LandingPage() {
                 <p className="text-white font-bold">BizManager Haiti</p>
               </div>
               <p className="text-sm mt-3 leading-relaxed">
-                Lojisyèl jesyon pou biznis ayisyen. Fèt an Ayiti, pou Ayiti. 🇭🇹
+                Lojisyèl jesyon pou biznis ayisyen. Fèt an Ayiti, pou Ayiti.
               </p>
             </div>
             <div>
