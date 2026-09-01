@@ -40,12 +40,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
       const path = window.location.pathname;
 
-      // Kesye gen aksè SÈLMAN nan POS la. Si li eseye ale yon lòt kote, voye l sou POS.
-      if (ctx.role === 'cashier' && !path.startsWith('/pos')) {
-        window.location.href = '/pos';
-        return;
-      }
-
       const { data: business } = await supabase
         .from('businesses')
         .select('business_name, is_admin, niche, currency, license_status, license_expiry_date, trial_start_date')
@@ -73,11 +67,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         return;
       }
 
-      const allowedWhenExpired = ['/subscribe', '/settings', '/admin'];
+      // ===== Verifikasyon lisans (AVAN redireksyon kesye a) =====
+      const allowedWhenExpired = ['/subscribe', '/settings', '/admin', '/expired'];
       const isAllowed = allowedWhenExpired.some(p => path.startsWith(p));
       // Admin toujou gen aksè
       if (!accessible && !business?.is_admin && !isAllowed) {
-        window.location.href = '/subscribe';
+        window.location.href = ctx.role === 'cashier' ? '/expired' : '/subscribe';
+        return;
+      }
+
+      // ===== Kesye gen aksè SÈLMAN nan POS la =====
+      if (ctx.role === 'cashier' && !path.startsWith('/pos') && !path.startsWith('/expired')) {
+        window.location.href = '/pos';
         return;
       }
 
