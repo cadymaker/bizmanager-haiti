@@ -41,6 +41,7 @@ export default function DashboardPage() {
   const [currency, setCurrency] = useState('HTG');
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [lowStock, setLowStock] = useState<LowStockProduct[]>([]);
+  const [showProfitDetail, setShowProfitDetail] = useState(false);
   const [invoices, setInvoices] = useState<{
     id: string;
     invoice_number: string;
@@ -81,7 +82,6 @@ export default function DashboardPage() {
         .single();
       setMetrics(m as any);
 
-      // Pwodwi ki bezwen rachte (stock ba oswa fini)
       const { data: prods } = await supabase
         .from('products')
         .select('id, name, quantity, low_stock_threshold, purchase_price')
@@ -208,45 +208,11 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
-      </div>
 
-      {/* Detay kalkil benefis */}
-      <div className="bg-white rounded-xl border border-gray-200 p-5">
-        <h2 className="font-medium text-gray-800 mb-3">Kijan benefis nèt la kalkile</h2>
-        <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-gray-600">Vant total (apre rabè)</span>
-            <span className="font-medium text-gray-900">{fmt(sales)}</span>
-          </div>
-          {(metrics?.total_discount ?? 0) > 0 && (
-            <div className="flex justify-between text-xs">
-              <span className="text-gray-400">Rabè bay kliyan yo</span>
-              <span className="text-gray-400">{fmt(metrics?.total_discount ?? 0)}</span>
-            </div>
-          )}
-          <div className="flex justify-between">
-            <span className="text-gray-600">− Kou pwodwi vann yo</span>
-            <span className="font-medium text-gray-700">{fmt(cogs)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">− Depans</span>
-            <span className="font-medium text-gray-700">{fmt(expenses)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-gray-600">− Pèt nan stock</span>
-            <span className="font-medium text-gray-700">{fmt(stockLoss)}</span>
-          </div>
-          <div className="flex justify-between border-t border-gray-100 pt-2 mt-2">
-            <span className="font-medium text-gray-800">Benefis nèt</span>
-            <span className={`font-bold text-lg ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {fmt(netProfit)}
-            </span>
-          </div>
-        </div>
-        <p className="text-xs text-gray-400 mt-3">
-          Envestisman pa antre nan kalkil sa a — acha machandiz konte kòm kou lè pwodwi a
-          vann, epi kapital se yon bagay ki rete nan biznis la.
-        </p>
+        <button onClick={() => setShowProfitDetail(true)}
+          className="mt-4 w-full py-2.5 bg-gray-50 text-gray-700 border border-gray-200 rounded-lg text-sm font-medium hover:bg-gray-100 transition-colors">
+          Wè kijan benefis nèt la kalkile
+        </button>
       </div>
 
       {/* Fakti resan */}
@@ -306,7 +272,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-orange-200 overflow-hidden">
           <div className="px-4 py-3 bg-orange-50 border-b border-orange-200 flex justify-between items-center">
             <div>
-              <h2 className="font-medium text-orange-800">📦 Pwodwi pou rachte</h2>
+              <h2 className="font-medium text-orange-800">Pwodwi pou rachte</h2>
               <p className="text-xs text-orange-600 mt-0.5">
                 {outOfStockCount > 0
                   ? `${outOfStockCount} pwodwi fini nèt, ${lowStock.length - outOfStockCount} prèske fini.`
@@ -323,7 +289,7 @@ export default function DashboardPage() {
                 <div className="min-w-0">
                   <div className="font-medium text-sm text-gray-800 truncate">{p.name}</div>
                   <div className="text-xs text-gray-400">
-                    Alèt lè stock ≤ {thresholdOf(p)}
+                    Alèt lè stock rive {thresholdOf(p)} oswa anba
                   </div>
                 </div>
                 <div className="flex items-center gap-3 flex-shrink-0">
@@ -332,11 +298,70 @@ export default function DashboardPage() {
                       ? 'bg-red-100 text-red-700'
                       : 'bg-orange-100 text-orange-700'
                   }`}>
-                    {p.quantity === 0 ? 'Fini ❌' : `${p.quantity} rete ⚠️`}
+                    {p.quantity === 0 ? 'Fini' : `${p.quantity} rete`}
                   </span>
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ===== MODAL DETAY BENEFIS ===== */}
+      {showProfitDetail && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setShowProfitDetail(false)}>
+          <div className="bg-white rounded-2xl w-full max-w-md my-4" onClick={e => e.stopPropagation()}>
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center">
+              <h2 className="font-semibold text-gray-800">Kijan benefis nèt la kalkile</h2>
+              <button onClick={() => setShowProfitDetail(false)}
+                className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+            </div>
+
+            <div className="p-5">
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Vant total (apre rabè)</span>
+                  <span className="font-medium text-gray-900">{fmt(sales)}</span>
+                </div>
+                {(metrics?.total_discount ?? 0) > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-400">Rabè bay kliyan yo</span>
+                    <span className="text-gray-400">{fmt(metrics?.total_discount ?? 0)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-gray-600">− Kou pwodwi vann yo</span>
+                  <span className="font-medium text-gray-700">{fmt(cogs)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">− Depans</span>
+                  <span className="font-medium text-gray-700">{fmt(expenses)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">− Pèt nan stock</span>
+                  <span className="font-medium text-gray-700">{fmt(stockLoss)}</span>
+                </div>
+                <div className="flex justify-between border-t border-gray-100 pt-3 mt-3">
+                  <span className="font-medium text-gray-800">Benefis nèt</span>
+                  <span className={`font-bold text-lg ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    {fmt(netProfit)}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs text-gray-400 mt-4 leading-relaxed">
+                Envestisman pa antre nan kalkil sa a — acha machandiz konte kòm kou lè pwodwi a
+                vann, epi kapital se yon bagay ki rete nan biznis la.
+              </p>
+            </div>
+
+            <div className="p-5 border-t border-gray-100">
+              <button onClick={() => setShowProfitDetail(false)}
+                className="w-full py-2.5 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">
+                Fèmen
+              </button>
+            </div>
           </div>
         </div>
       )}
