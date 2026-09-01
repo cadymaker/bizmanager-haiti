@@ -15,6 +15,17 @@ interface Feedback {
   created_at: string;
 }
 
+interface Contact {
+  id: string;
+  name: string;
+  phone: string | null;
+  email: string | null;
+  business_name: string | null;
+  message: string;
+  status: string;
+  created_at: string;
+}
+
 interface Deletion {
   id: string;
   business_name: string | null;
@@ -60,7 +71,6 @@ function fmtDate(iso: string | null): string {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Konbyen tan yon kont te dire
 function accountAge(created: string | null, deleted: string): string {
   if (!created) return '—';
   const days = Math.round(
@@ -74,8 +84,9 @@ function accountAge(created: string | null, deleted: string): string {
 }
 
 export default function AdminFeedbackPage() {
-  const [tab, setTab] = useState<'feedback' | 'deletions'>('feedback');
+  const [tab, setTab] = useState<'feedback' | 'contacts' | 'deletions'>('feedback');
   const [items, setItems] = useState<Feedback[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
   const [deletions, setDeletions] = useState<Deletion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -103,11 +114,12 @@ export default function AdminFeedbackPage() {
     }
 
     setItems(data.feedback ?? []);
+    setContacts(data.contacts ?? []);
     setDeletions(data.deletions ?? []);
     setLoading(false);
   }
 
-  async function setStatus(id: string, status: string) {
+  async function setStatus(id: string, status: string, type: 'feedback' | 'contact' = 'feedback') {
     setBusy(id);
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
@@ -116,31 +128,15 @@ export default function AdminFeedbackPage() {
     await fetch('/api/admin/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      body: JSON.stringify({ id, status }),
+      body: JSON.stringify({ id, status, type }),
     });
 
-    setItems(prev => prev.map(f => f.id === id ? { ...f, status } : f));
+    if (type === 'contact') {
+      setContacts(prev => prev.map(c => c.id === id ? { ...c, status } : c));
+    } else {
+      setItems(prev => prev.map(f => f.id === id ? { ...f, status } : f));
+    }
     setBusy(null);
-  }
-
-  function replyByEmail(f: Feedback) {
-    if (!f.email) return;
-    const subject = `BizManager — repons pou mesaj ou`;
-    const body =
-      `Bonjou ${f.owner_name ?? ''},\n\n` +
-      `Mèsi pou mesaj ou.\n\n` +
-      `\n\n` +
-      `---\n` +
-      `Mesaj ou te voye a:\n"${f.message}"\n`;
-    window.location.href =
-      `mailto:${f.email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-  }
-
-  function replyByWhatsApp(f: Feedback) {
-    if (!f.phone) return;
-    const phone = f.phone.replace(/[^0-9]/g, '');
-    const text = `Bonjou ${f.owner_name ?? ''}! Mèsi pou mesaj ou nan BizManager. `;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   }
 
   const filtered = items.filter(f => {
@@ -150,27 +146,18 @@ export default function AdminFeedbackPage() {
   });
 
   const newCount = items.filter(f => f.status === 'new').length;
-  const bugCount = items.filter(f => f.category === 'bug').length;
+  const newContacts = contacts.filter(c => c.status === 'new').length;
 
-  // Konte rezon efasman yo
-  const reasonCounts = deletions.reduce((acc, d) => {
-    acc[d.reason] = (acc[d.reason] ?? 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-  const topReasons = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1]);
-
-  if (error) return (
-    <div className="p-6"><div className="bg-red-50 text-red-600 rounded-xl p-4">{error}</div></div>
-  );
-
-  return (
+    return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap justify-between items-start gap-3">
         <div>
-          <a href="/admin" className="text-sm text-blue-600 hover:underline">← Retounen nan Pannèl Admin</a>
+          <a href="/admin" className="text-sm text-blue-600 hover:underline">
+            Retounen nan Pannèl Admin
+          </a>
           <h1 className="text-2xl font-semibold text-gray-900 mt-2">Sa itilizatè yo di</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {items.length} mesaj · {deletions.length} kont efase
+            {items.length} feedback · {contacts.length} mesaj kontak · {deletions.length} kont efase
           </p>
         </div>
         <button onClick={load}
@@ -179,38 +166,42 @@ export default function AdminFeedbackPage() {
         </button>
       </div>
 
-      {/* Onglè */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">
         <button onClick={() => setTab('feedback')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
             tab === 'feedback'
               ? 'border-blue-600 text-blue-700'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}>
-          💬 Feedback ({items.length})
+          Feedback ({items.length})
+        </button>
+        <button onClick={() => setTab('contacts')}
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
+            tab === 'contacts'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}>
+          Mesaj kontak ({contacts.length})
         </button>
         <button onClick={() => setTab('deletions')}
-          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors ${
+          className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${
             tab === 'deletions'
               ? 'border-blue-600 text-blue-700'
               : 'border-transparent text-gray-500 hover:text-gray-800'
           }`}>
-          🚪 Rezon efasman ({deletions.length})
+          Rezon efasman ({deletions.length})
         </button>
       </div>
 
-      {loading ? (
-        <div className="p-6 text-gray-400 text-sm">Chajman...</div>
-      ) : tab === 'feedback' ? (
-        <>
-          <div className="grid grid-cols-3 gap-4">
+      {error && <p className="text-red-600">{error}</p>}
+      {loading && <p className="text-gray-400 text-sm">Chajman...</p>}
+
+            {!loading && tab === 'feedback' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
             <div className="bg-white rounded-xl border p-4">
               <p className="text-xs text-gray-500 uppercase">Nouvo</p>
               <p className="text-2xl font-semibold mt-1 text-green-600">{newCount}</p>
-            </div>
-            <div className="bg-white rounded-xl border p-4">
-              <p className="text-xs text-gray-500 uppercase">Pwoblèm</p>
-              <p className="text-2xl font-semibold mt-1 text-red-600">{bugCount}</p>
             </div>
             <div className="bg-white rounded-xl border p-4">
               <p className="text-xs text-gray-500 uppercase">Total</p>
@@ -222,11 +213,11 @@ export default function AdminFeedbackPage() {
             {[
               { v: 'all', label: 'Tout' },
               { v: 'new', label: 'Nouvo sèlman' },
-              { v: 'bug', label: '🐛 Pwoblèm' },
-              { v: 'suggestion', label: '💡 Sijesyon' },
+              { v: 'bug', label: 'Pwoblèm' },
+              { v: 'suggestion', label: 'Sijesyon' },
             ].map(f => (
               <button key={f.v} onClick={() => setFilter(f.v as any)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium border ${
                   filter === f.v
                     ? 'bg-blue-600 text-white border-blue-600'
                     : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
@@ -277,28 +268,29 @@ export default function AdminFeedbackPage() {
 
                     <div className="flex flex-wrap gap-2 mt-3">
                       {f.email && (
-                        <button onClick={() => replyByEmail(f)}
+                        <a href={`mailto:${f.email}`}
                           className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200">
-                          ✉️ Reponn pa imèl
-                        </button>
+                          Reponn pa imel
+                        </a>
                       )}
                       {f.phone && (
-                        <button onClick={() => replyByWhatsApp(f)}
+                        <a href={`https://wa.me/${f.phone.replace(/[^0-9]/g, '')}`}
+                          target="_blank" rel="noopener noreferrer"
                           className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200">
                           WhatsApp
-                        </button>
+                        </a>
                       )}
                       <div className="flex gap-2 ml-auto">
                         {f.status !== 'read' && (
                           <button onClick={() => setStatus(f.id, 'read')} disabled={busy === f.id}
                             className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 disabled:opacity-50">
-                            Make kòm li
+                            Make kom li
                           </button>
                         )}
                         {f.status !== 'done' && (
                           <button onClick={() => setStatus(f.id, 'done')} disabled={busy === f.id}
                             className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-xs hover:bg-black disabled:opacity-50">
-                            Make kòm fini
+                            Make kom fini
                           </button>
                         )}
                         {f.status === 'done' && (
@@ -314,32 +306,107 @@ export default function AdminFeedbackPage() {
               })}
             </div>
           )}
-        </>
-      ) : (
-        <>
-          {/* Rezime rezon yo */}
-          {topReasons.length > 0 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h2 className="font-medium text-gray-800 mb-3">Poukisa moun ale</h2>
-              <div className="space-y-2">
-                {topReasons.map(([reason, count]) => {
-                  const pct = Math.round((count / deletions.length) * 100);
-                  return (
-                    <div key={reason}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-700">{DELETE_REASONS[reason] ?? reason}</span>
-                        <span className="text-gray-500">{count} ({pct}%)</span>
+        </div>
+      )}
+
+      {!loading && tab === 'contacts' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border p-4">
+              <p className="text-xs text-gray-500 uppercase">Nouvo</p>
+              <p className="text-2xl font-semibold mt-1 text-green-600">{newContacts}</p>
+            </div>
+            <div className="bg-white rounded-xl border p-4">
+              <p className="text-xs text-gray-500 uppercase">Total</p>
+              <p className="text-2xl font-semibold mt-1">{contacts.length}</p>
+            </div>
+          </div>
+
+          <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-sm text-blue-800">
+            Mesaj sa yo soti nan fom kontak paj vitrin lan.
+          </div>
+
+          {contacts.length === 0 ? (
+            <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
+              Pa gen okenn mesaj kontak toujou.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {contacts.map(c => {
+                const st = STATUSES[c.status] ?? STATUSES.new;
+                return (
+                  <div key={c.id} className={`bg-white rounded-xl border p-5 ${
+                    c.status === 'new' ? 'border-green-200' : 'border-gray-200'
+                  }`}>
+                    <div className="flex flex-wrap justify-between items-start gap-3 mb-3">
+                      <div className="min-w-0">
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${st.cls}`}>
+                          {st.label}
+                        </span>
+                        <div className="font-medium text-gray-900 mt-2">
+                          {c.name}
+                          {c.business_name ? (
+                            <span className="text-gray-500 font-normal"> · {c.business_name}</span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-gray-400 break-all">
+                          {c.email ?? ''} {c.phone ? `· ${c.phone}` : ''}
+                        </div>
                       </div>
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div className="bg-red-500 h-2 rounded-full" style={{ width: `${pct}%` }} />
+                      <div className="text-xs text-gray-400 whitespace-nowrap">
+                        {fmtDate(c.created_at)}
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+
+                    <div className="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 whitespace-pre-wrap">
+                      {c.message}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {c.email && (
+                        <a href={`mailto:${c.email}`}
+                          className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-200">
+                          Reponn pa imel
+                        </a>
+                      )}
+                      {c.phone && (
+                        <a href={`https://wa.me/${c.phone.replace(/[^0-9]/g, '')}`}
+                          target="_blank" rel="noopener noreferrer"
+                          className="px-3 py-1.5 bg-green-100 text-green-700 rounded-lg text-xs font-medium hover:bg-green-200">
+                          WhatsApp
+                        </a>
+                      )}
+                      <div className="flex gap-2 ml-auto">
+                        {c.status !== 'read' && (
+                          <button onClick={() => setStatus(c.id, 'read', 'contact')} disabled={busy === c.id}
+                            className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs hover:bg-gray-200 disabled:opacity-50">
+                            Make kom li
+                          </button>
+                        )}
+                        {c.status !== 'done' && (
+                          <button onClick={() => setStatus(c.id, 'done', 'contact')} disabled={busy === c.id}
+                            className="px-3 py-1.5 bg-gray-900 text-white rounded-lg text-xs hover:bg-black disabled:opacity-50">
+                            Make kom fini
+                          </button>
+                        )}
+                        {c.status === 'done' && (
+                          <button onClick={() => setStatus(c.id, 'new', 'contact')} disabled={busy === c.id}
+                            className="px-3 py-1.5 bg-gray-100 text-gray-600 rounded-lg text-xs hover:bg-gray-200 disabled:opacity-50">
+                            Remete nouvo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
+        </div>
+      )}
 
+      {!loading && tab === 'deletions' && (
+        <div className="space-y-6">
           {deletions.length === 0 ? (
             <div className="bg-white rounded-xl border border-gray-200 p-8 text-center text-gray-400 text-sm">
               Pa gen okenn kont ki efase toujou.
@@ -354,15 +421,13 @@ export default function AdminFeedbackPage() {
                         {DELETE_REASONS[d.reason] ?? d.reason}
                       </span>
                       <div className="font-medium text-gray-900 mt-2">
-                        {d.business_name ?? '—'}
+                        {d.business_name ?? 'Biznis'}
                       </div>
                       <div className="text-xs text-gray-400 break-all">
                         {d.owner_name} {d.email ? `· ${d.email}` : ''} {d.phone ? `· ${d.phone}` : ''}
                       </div>
                       <div className="text-xs text-gray-400 mt-1">
-                        {d.niche ? `Niche: ${d.niche} · ` : ''}
-                        Lisans: {d.license_status ?? '—'} ·
-                        Kont lan te dire {accountAge(d.account_created_at, d.deleted_at)}
+                        Lisans: {d.license_status ?? 'pa konnen'} · Kont lan te dire {accountAge(d.account_created_at, d.deleted_at)}
                       </div>
                     </div>
                     <div className="text-xs text-gray-400 whitespace-nowrap">
@@ -379,7 +444,7 @@ export default function AdminFeedbackPage() {
               ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

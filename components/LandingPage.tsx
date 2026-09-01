@@ -279,8 +279,8 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="hidden lg:flex justify-center">
-              <div className="w-[280px]">
+                       <div className="flex justify-center mt-4 lg:mt-0">
+              <div className="w-[220px] sm:w-[250px] lg:w-[280px]">
                 <PhoneMockup />
               </div>
             </div>
@@ -601,7 +601,7 @@ export default function LandingPage() {
                 <p className="text-white font-bold">BizManager Haiti</p>
               </div>
               <p className="text-sm mt-3 leading-relaxed">
-                Lojisyèl jesyon pou ti komès ayisyen. Fèt an Ayiti, pou Ayiti. 🇭🇹
+                Lojisyèl jesyon pou biznis ayisyen. Fèt an Ayiti, pou Ayiti. 🇭🇹
               </p>
             </div>
             <div>

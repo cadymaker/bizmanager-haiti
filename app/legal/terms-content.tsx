@@ -41,7 +41,7 @@ export default function TermsContent() {
 
       <h4 className="font-semibold text-gray-800 mt-4">7. Kontakte nou</h4>
       <p>Pou nenpòt kesyon:<br />
-      📧 sale.cs@cadymakerservices.com</p>
+      📧 sales.cs@cadymakerservices.com</p>
 
       <hr className="my-8 border-gray-200" />
 
@@ -83,7 +83,7 @@ export default function TermsContent() {
 
       <h4 className="font-semibold text-gray-800 mt-4">7. Nous contacter</h4>
       <p>Pour toute question :<br />
-      📧 sale.cs@cadymakerservices.com</p>
+      📧 sales.cs@cadymakerservices.com</p>
     </div>
   );
 }

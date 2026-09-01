@@ -25,7 +25,7 @@ async function requireAdmin(req: NextRequest) {
   return { user };
 }
 
-// Li tout feedback yo ak rezon efasman yo
+// Li feedback, rezon efasman, ak mesaj kontak yo
 export async function GET(req: NextRequest) {
   const check = await requireAdmin(req);
   if ('error' in check) {
@@ -48,26 +48,35 @@ export async function GET(req: NextRequest) {
     .order('deleted_at', { ascending: false })
     .limit(200);
 
+  const { data: contacts } = await supabaseAdmin
+    .from('contact_messages')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200);
+
   return NextResponse.json({
     feedback: feedback ?? [],
     deletions: deletions ?? [],
+    contacts: contacts ?? [],
   });
 }
 
-// Chanje estati yon feedback
+// Chanje estati yon feedback oswa yon mesaj kontak
 export async function POST(req: NextRequest) {
   const check = await requireAdmin(req);
   if ('error' in check) {
     return NextResponse.json({ error: check.error }, { status: check.status });
   }
 
-  const { id, status } = await req.json();
+  const { id, status, type } = await req.json();
   if (!id || !['new', 'read', 'done'].includes(status)) {
     return NextResponse.json({ error: 'Paramèt envalid.' }, { status: 400 });
   }
 
+  const table = type === 'contact' ? 'contact_messages' : 'feedback';
+
   const { error } = await supabaseAdmin
-    .from('feedback')
+    .from(table)
     .update({ status })
     .eq('id', id);
 

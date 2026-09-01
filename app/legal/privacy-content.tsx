@@ -49,7 +49,7 @@ export default function PrivacyContent() {
 
       <h4 className="font-semibold text-gray-800 mt-4">8. Kontakte nou</h4>
       <p>Pou nenpòt kesyon sou vi prive w oswa done ou yo:<br />
-      📧 sale.cs@cadymakerservices.com</p>
+      📧 sales.cs@cadymakerservices.com</p>
 
       <hr className="my-8 border-gray-200" />
 
@@ -99,7 +99,7 @@ export default function PrivacyContent() {
 
       <h4 className="font-semibold text-gray-800 mt-4">8. Nous contacter</h4>
       <p>Pour toute question concernant votre vie privée ou vos données :<br />
-      📧 sale.cs@cadymakerservices.com</p>
+      📧 sales.cs@cadymakerservices.com</p>
     </div>
   );
 }
