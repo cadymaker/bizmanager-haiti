@@ -106,11 +106,10 @@ const APP_SCHEMA = {
     '@type': 'Organization',
     name: 'BizManager Haiti',
     url: 'https://www.bizmanagerhaiti.com',
-    address: {
-      '@type': 'PostalAddress',
-      addressLocality: 'Gonaïves',
-      addressCountry: 'HT',
-    },
+         address: {
+        '@type': 'PostalAddress',
+        addressCountry: 'HT',
+      },
   },
 };
 
@@ -658,7 +657,7 @@ export default function LandingPage() {
                 <a href="/legal/privacy" className="block hover:text-white">Politik Konfidansyalite</a>
                 <a href="/legal/terms" className="block hover:text-white">Kondisyon Itilizasyon</a>
                 <a href="#kontak" className="block hover:text-white">Kontakte nou</a>
-                <p>Gonaïves, Ayiti</p>
+               <p>Ayiti</p>
               </div>
             </div>
           </div>
