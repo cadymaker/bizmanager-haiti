@@ -32,7 +32,7 @@ export default function PrivacyContent() {
       </ul>
 
       <h4 className="font-semibold text-gray-800 mt-4">4. Kijan nou pwoteje done yo</h4>
-      <p>Done ou yo estoke sou sèvè sekirize (Supabase). Chak biznis gen pwòp espas izole — yon biznis pa ka wè done yon lòt biznis. Nou sèvi ak mezi sekirite modèn pou pwoteje enfòmasyon ou.</p>
+      <p>Done ou yo estoke sou sèvè sekirize. Chak biznis gen pwòp espas izole, yon biznis pa ka wè done yon lòt biznis. Nou sèvi ak mezi sekirite modèn pou pwoteje enfòmasyon ou.</p>
 
       <h4 className="font-semibold text-gray-800 mt-4">5. Dwa ou genyen</h4>
       <ul className="list-disc pl-5 space-y-1">
@@ -82,7 +82,7 @@ export default function PrivacyContent() {
       </ul>
 
       <h4 className="font-semibold text-gray-800 mt-4">4. Comment nous protégeons les données</h4>
-      <p>Vos données sont stockées sur des serveurs sécurisés (Supabase). Chaque entreprise dispose de son propre espace isolé — une entreprise ne peut pas voir les données d'une autre. Nous utilisons des mesures de sécurité modernes pour protéger vos informations.</p>
+      <p>Vos données sont stockées sur des serveurs sécurisés. Chaque entreprise dispose de son propre espace isolé — une entreprise ne peut pas voir les données d'une autre. Nous utilisons des mesures de sécurité modernes pour protéger vos informations.</p>
 
       <h4 className="font-semibold text-gray-800 mt-4">5. Vos droits</h4>
       <ul className="list-disc pl-5 space-y-1">
