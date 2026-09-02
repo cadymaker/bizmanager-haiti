@@ -45,9 +45,9 @@ const FEATURES = [
 ];
 
 const PRICING = [
-  { duration: '30 jou', price: '1 000', per: 'HTG' },
-  { duration: '90 jou', price: '2 500', per: 'HTG', popular: true },
-  { duration: '1 an', price: '10 000', per: 'HTG', best: true },
+  { duration: '30 jou', price: '1 000', per: 'HTG', note: 'Pou eseye' },
+  { duration: '90 jou', price: '2 500', per: 'HTG', note: 'Ekonomi 500 HTG', popular: true },
+  { duration: '1 an', price: '10 000', per: 'HTG', note: 'Ekonomi 2 000 HTG', best: true },
 ];
 
 const FAQ = [
@@ -77,7 +77,6 @@ const FAQ = [
   },
 ];
 
-// Done estriktire pou Google
 const APP_SCHEMA = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -120,14 +119,22 @@ const FAQ_SCHEMA = {
   mainEntity: FAQ.map(item => ({
     '@type': 'Question',
     name: item.q,
-    acceptedAnswer: {
-      '@type': 'Answer',
-      text: item.a,
-    },
+    acceptedAnswer: { '@type': 'Answer', text: item.a },
   })),
 };
 
-// Mockup telefòn nan POS la (SVG)
+// Flèch pou bouton yo (SVG — pa gen librairie)
+function ArrowRight({ className = '' }: { className?: string }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+      className={className} aria-hidden="true">
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <polyline points="12 5 19 12 12 19" />
+    </svg>
+  );
+}
+
 function PhoneMockup() {
   return (
     <svg viewBox="0 0 280 560" className="w-full h-auto drop-shadow-2xl" aria-hidden="true">
@@ -190,7 +197,6 @@ function PhoneMockup() {
   );
 }
 
-// Ilistrasyon sinkronizasyon offline
 function OfflineIllustration() {
   return (
     <svg viewBox="0 0 400 220" className="w-full h-auto" aria-hidden="true">
@@ -250,15 +256,10 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* Done estriktire pou Google */}
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(APP_SCHEMA) }}
-      />
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }}
-      />
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(APP_SCHEMA) }} />
+      <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(FAQ_SCHEMA) }} />
 
       {/* ===== ANTET ===== */}
       <header className="border-b border-gray-100 sticky top-0 bg-white/90 backdrop-blur-md z-40">
@@ -280,16 +281,17 @@ export default function LandingPage() {
               Konekte
             </a>
             <a href="/register"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap shadow-sm">
+              className="group px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 whitespace-nowrap shadow-sm inline-flex items-center gap-1.5">
               Komanse gratis
+              <ArrowRight className="transition-transform group-hover:translate-x-0.5" />
             </a>
           </div>
         </div>
       </header>
 
-      {/* ===== HERO ===== */}
+      {/* ===== HERO (fon blan ak gradyan dous) ===== */}
       <section className="relative overflow-hidden bg-gradient-to-b from-blue-50 via-white to-white">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(37,99,235,0.10),transparent_60%)]" />
         <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-14 sm:py-20">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div>
@@ -310,16 +312,21 @@ export default function LandingPage() {
 
               <div className="flex flex-col sm:flex-row gap-3 mt-8">
                 <a href="/register"
-                  className="px-7 py-3.5 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 text-center shadow-lg shadow-blue-600/20 transition-all hover:shadow-xl">
-                  Kreye kont gratis
+                  className="group px-7 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 text-center shadow-lg shadow-blue-600/25 transition-all hover:shadow-xl hover:shadow-blue-600/30 inline-flex items-center justify-center gap-2">
+                  Kòmanse 14 jou gratis
+                  <ArrowRight className="transition-transform group-hover:translate-x-1" />
                 </a>
                 <a href="#kontak"
-                  className="px-7 py-3.5 bg-white text-gray-800 border border-gray-200 rounded-xl text-base font-semibold hover:bg-gray-50 text-center transition-colors">
+                  className="px-7 py-4 bg-white text-gray-800 border border-gray-200 rounded-xl text-base font-semibold hover:bg-gray-50 hover:border-gray-300 text-center transition-all">
                   Voye nou yon mesaj
                 </a>
               </div>
 
-              <div className="flex flex-wrap gap-x-6 gap-y-2 mt-8 text-sm text-gray-500">
+              <p className="text-sm text-gray-500 mt-4">
+                Pa gen kat kredi bezwen · Konfigirasyon an 2 minit
+              </p>
+
+              <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 text-sm text-gray-500">
                 <span>Mache sou telefon</span>
                 <span>Tout an Kreyol</span>
                 <span>Mache offline</span>
@@ -335,9 +342,9 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== PWOBLEM ===== */}
-      <section className="bg-gray-50 border-y border-gray-100">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16">
+      {/* ===== PWOBLEM (fon gri dous) ===== */}
+      <section className="bg-slate-50 border-y border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div className="text-center max-w-2xl mx-auto">
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">
               Ou konnen pwoblèm sa yo?
@@ -359,8 +366,9 @@ export default function LandingPage() {
                 desc: 'Lòt sistèm bloke nèt lè koneksyon an ale. Ou pa ka vann, kliyan an ap tann.',
               },
             ].map((p, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                <div className="w-10 h-1.5 rounded-full bg-blue-600" />
+              <div key={i}
+                className="bg-white rounded-2xl border border-gray-200 p-6 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg">
+                <div className="w-10 h-1.5 rounded-full bg-gradient-to-r from-blue-500 to-blue-700" />
                 <h3 className="font-semibold text-gray-900 mt-4">{p.title}</h3>
                 <p className="text-sm text-gray-600 mt-2 leading-relaxed">{p.desc}</p>
               </div>
@@ -373,36 +381,38 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== FONKSYONALITE ===== */}
-      <section id="fonksyonalite" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="text-center max-w-2xl mx-auto">
-          <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Fonksyonalite</p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-            Tout sa yon ti komès bezwen
-          </h2>
-          <p className="text-gray-600 mt-3">
-            Pa gen bagay konplike. Chak fonksyonalite fèt pou reyalite biznis an Ayiti.
-          </p>
-        </div>
+      {/* ===== FONKSYONALITE (fon blan) ===== */}
+      <section id="fonksyonalite" className="bg-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+          <div className="text-center max-w-2xl mx-auto">
+            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Fonksyonalite</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
+              Tout sa yon ti komès bezwen
+            </h2>
+            <p className="text-gray-600 mt-3">
+              Pa gen bagay konplike. Chak fonksyonalite fèt pou reyalite biznis an Ayiti.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-12">
-          {FEATURES.map((f, i) => (
-            <div key={i}
-              className="bg-white rounded-2xl border border-gray-200 p-5 hover:border-blue-200 hover:shadow-md transition-all">
-              <div className="w-11 h-11 rounded-xl bg-blue-50 flex items-center justify-center text-xl">
-                {f.icon}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-12">
+            {FEATURES.map((f, i) => (
+              <div key={i}
+                className="bg-white rounded-2xl border border-gray-200 p-5 transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-blue-200">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-xl shadow-sm shadow-blue-500/20">
+                  {f.icon}
+                </div>
+                <h3 className="font-semibold text-gray-900 text-sm mt-4">{f.title}</h3>
+                <p className="text-sm text-gray-600 mt-2 leading-relaxed">{f.desc}</p>
               </div>
-              <h3 className="font-semibold text-gray-900 text-sm mt-4">{f.title}</h3>
-              <p className="text-sm text-gray-600 mt-2 leading-relaxed">{f.desc}</p>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </section>
 
-      {/* ===== OFFLINE ===== */}
-      <section className="bg-gradient-to-br from-blue-600 to-blue-700 relative overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(255,255,255,0.1),transparent_50%)]" />
-        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16">
+      {/* ===== OFFLINE (fon ble fonse) ===== */}
+      <section className="bg-gradient-to-br from-blue-600 to-blue-800 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,rgba(255,255,255,0.12),transparent_50%)]" />
+        <div className="relative max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div className="grid lg:grid-cols-2 gap-10 items-center">
             <div>
               <p className="text-sm font-semibold text-blue-200 uppercase tracking-wide">
@@ -417,74 +427,128 @@ export default function LandingPage() {
               </p>
               <div className="flex flex-wrap gap-3 mt-7">
                 {['Eskane barcode', 'Fè vant', 'Bay resi', 'Sinkronize otomatikman'].map((t, i) => (
-                  <span key={i} className="bg-white/15 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur">
+                  <span key={i} className="bg-white/15 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur border border-white/10">
                     {t}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="bg-white/10 rounded-2xl p-6 backdrop-blur">
+            <div className="bg-white/10 rounded-2xl p-6 backdrop-blur border border-white/10">
               <OfflineIllustration />
             </div>
           </div>
         </div>
       </section>
 
-      {/* ===== TARIF ===== */}
-      <section id="tarif" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="text-center max-w-2xl mx-auto">
-          <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Tarif</p>
-          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-            Yon pri ki fè sans pou ti komès
-          </h2>
-          <p className="text-gray-600 mt-3">
-            Kòmanse ak <strong className="text-gray-900">14 jou gratis</strong>.
-            Apre sa, chwazi peryòd ki bon pou ou.
+      {/* ===== TARIF (fon blan) ===== */}
+      <section id="tarif" className="bg-white">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+          <div className="text-center max-w-2xl mx-auto">
+            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Tarif</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
+              Yon pri ki fè sans pou ti komès
+            </h2>
+            <p className="text-gray-600 mt-3">
+              Kòmanse ak <strong className="text-gray-900">14 jou gratis</strong>.
+              Apre sa, chwazi peryòd ki bon pou ou.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 sm:gap-6 mt-16 max-w-4xl mx-auto items-center">
+            {PRICING.map((p, i) => (
+              <div key={i}
+                className={`rounded-2xl text-center relative bg-white transition-all duration-300 ${
+                  p.popular
+                    ? 'p-8 border-2 border-blue-600 shadow-xl shadow-blue-500/20 sm:scale-110 z-10'
+                    : p.best
+                      ? 'p-6 border-2 border-green-500 shadow-lg shadow-green-500/10'
+                      : 'p-6 border border-gray-200 hover:border-gray-300 hover:shadow-md'
+                }`}>
+                {p.popular && (
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-4 py-1.5 rounded-full font-semibold whitespace-nowrap shadow-lg shadow-blue-600/30">
+                    Pi popilè
+                  </span>
+                )}
+                {p.best && (
+                  <span className="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-4 py-1.5 rounded-full font-semibold whitespace-nowrap shadow-lg shadow-green-600/30">
+                    Pi bon valè
+                  </span>
+                )}
+
+                <p className="text-sm text-gray-500 uppercase tracking-wide">{p.duration}</p>
+                <p className={`font-bold text-gray-900 mt-2 ${p.popular ? 'text-4xl' : 'text-3xl'}`}>
+                  {p.price}
+                  <span className="text-base font-normal text-gray-500"> {p.per}</span>
+                </p>
+                {p.note && (
+                  <p className={`text-xs mt-2 font-medium ${
+                    p.popular ? 'text-blue-600' : p.best ? 'text-green-600' : 'text-gray-400'
+                  }`}>
+                    {p.note}
+                  </p>
+                )}
+
+                <a href="/register"
+                  className={`block mt-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    p.popular
+                      ? 'bg-blue-600 text-white hover:bg-blue-700'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}>
+                  Chwazi
+                </a>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-center text-sm text-gray-500 mt-10">
+            Peman ak MonCash oswa cash · Tout fonksyonalite yo enkli nan chak plan
           </p>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-12 max-w-3xl mx-auto">
-          {PRICING.map((p, i) => (
-            <div key={i}
-              className={`rounded-2xl p-6 text-center relative bg-white ${
-                p.popular
-                  ? 'border-2 border-blue-600 shadow-xl shadow-blue-600/10 sm:scale-105'
-                  : 'border border-gray-200'
-              }`}>
-              {p.popular && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                  Pi popile
-                </span>
-              )}
-              {p.best && (
-                <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-green-600 text-white text-xs px-3 py-1 rounded-full font-medium whitespace-nowrap">
-                  Pi bon vale
-                </span>
-              )}
-              <p className="text-sm text-gray-500 uppercase tracking-wide">{p.duration}</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">
-                {p.price}
-                <span className="text-base font-normal text-gray-500"> {p.per}</span>
-              </p>
-            </div>
-          ))}
-        </div>
-
-        <p className="text-center text-sm text-gray-500 mt-8">
-          Peman ak MonCash oswa cash · Tout fonksyonalite yo enkli nan chak plan
-        </p>
-
-        <div className="text-center mt-8">
-          <a href="/register"
-            className="inline-block px-8 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 shadow-lg shadow-blue-600/20">
-            Kòmanse 14 jou gratis
-          </a>
         </div>
       </section>
 
-      {/* ===== FAQ ===== */}
-      <section className="bg-gray-50 border-y border-gray-100">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16">
+      {/* ===== KI MOUN NOU YE (otantik, pa fo temwayaj) ===== */}
+      <section className="bg-slate-50 border-y border-gray-100">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+          <div className="text-center">
+            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Ki moun nou ye</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
+              Fèt pa yon komèsan, pou komèsan
+            </h2>
+          </div>
+
+          <div className="bg-white rounded-2xl border border-gray-200 p-8 mt-10 shadow-sm">
+            <p className="text-gray-700 leading-relaxed">
+              BizManager pa soti nan yon biwo. Li soti nan{' '}
+              <strong className="text-gray-900">Cadymaker Fitness</strong>, yon vrè biznis
+              nan Gonayiv, kote nou te gen menm pwoblèm ou yo: kès ki pa balanse nan fen jounen an,
+              entènèt ki koupe nan mitan yon vant, stock ki disparèt san esplikasyon.
+            </p>
+            <p className="text-gray-700 leading-relaxed mt-4">
+              Nou te chèche yon solisyon. Sa nou jwenn yo te fèt pou lòt reyalite — yo mande
+              entènèt tout tan, yo pa an Kreyòl, epi pri yo an dola. Kidonk nou konstwi sa nou
+              te bezwen an nou menm, epi nou teste l chak jou nan pwòp kès nou.
+            </p>
+            <p className="text-gray-700 leading-relaxed mt-4">
+              Kounye a n ap pataje l ak lòt ti komès ayisyen.{' '}
+              <strong className="text-gray-900">
+                Chak fonksyonalite nan app la soti nan yon vrè pwoblèm nou te viv.
+              </strong>
+            </p>
+
+            <div className="flex items-center gap-3 mt-6 pt-6 border-t border-gray-100">
+              <img src="/icon-192.png" alt="" className="w-11 h-11 rounded-xl" />
+              <div>
+                <p className="font-semibold text-gray-900 text-sm">Ekip BizManager Haiti</p>
+                <p className="text-xs text-gray-500">Gonayiv, Ayiti</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ===== FAQ (fon blan) ===== */}
+      <section className="bg-white">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div className="text-center">
             <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">FAQ</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
@@ -492,12 +556,12 @@ export default function LandingPage() {
             </h2>
           </div>
 
-          <div className="mt-10 bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden">
+          <div className="mt-10 bg-white rounded-2xl border border-gray-200 divide-y divide-gray-100 overflow-hidden shadow-sm">
             {FAQ.map((item, i) => (
               <div key={i}>
                 <button
                   onClick={() => setOpenFaq(openFaq === i ? null : i)}
-                  className="w-full text-left px-5 py-4 flex justify-between items-center gap-3 hover:bg-gray-50 transition-colors"
+                  className="w-full text-left px-5 py-4 flex justify-between items-center gap-3 hover:bg-slate-50 transition-colors"
                 >
                   <span className="text-sm font-medium text-gray-800">{item.q}</span>
                   <span className="text-gray-400 text-xl flex-shrink-0 leading-none">
@@ -505,7 +569,7 @@ export default function LandingPage() {
                   </span>
                 </button>
                 {openFaq === i && (
-                  <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed bg-gray-50">
+                  <div className="px-5 pb-4 text-sm text-gray-600 leading-relaxed bg-slate-50">
                     {item.a}
                   </div>
                 )}
@@ -515,138 +579,144 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ===== KONTAK ===== */}
-      <section id="kontak" className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="grid lg:grid-cols-2 gap-10">
-          <div>
-            <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Kontak</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-              Yon kesyon? Ekri nou.
-            </h2>
-            <p className="text-gray-600 mt-4 leading-relaxed">
-              Ou vle konnen si BizManager bon pou biznis ou? Ou bezwen yon demonstrasyon?
-              Voye nou yon mesaj epi n ap reponn ou.
-            </p>
+      {/* ===== KONTAK (fon gri dous) ===== */}
+      <section id="kontak" className="bg-slate-50 border-y border-gray-100">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+          <div className="grid lg:grid-cols-2 gap-10">
+            <div>
+              <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Kontak</p>
+              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
+                Yon kesyon? Ekri nou.
+              </h2>
+              <p className="text-gray-600 mt-4 leading-relaxed">
+                Ou vle konnen si BizManager bon pou biznis ou? Ou bezwen yon demonstrasyon?
+                Voye nou yon mesaj epi n ap reponn ou.
+              </p>
 
-            <div className="mt-8 space-y-4">
-              {[
-                { title: 'Repons rapid', desc: 'N ap reponn ou nan mwens pase 24 è.' },
-                { title: 'Konsèy san angajman', desc: 'N ap di w onètman si app la bon pou ou.' },
-                { title: 'Ekip lokal', desc: 'Nou baze an Ayiti, nou konnen reyalite a.' },
-              ].map((it, i) => (
-                <div key={i} className="flex gap-3">
-                  <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900 text-sm">{it.title}</p>
-                    <p className="text-sm text-gray-600">{it.desc}</p>
+              <div className="mt-8 space-y-4">
+                {[
+                  { title: 'Repons rapid', desc: 'N ap reponn ou nan mwens pase 24 è.' },
+                  { title: 'Konsèy san angajman', desc: 'N ap di w onètman si app la bon pou ou.' },
+                  { title: 'Ekip lokal', desc: 'Nou baze an Ayiti, nou konnen reyalite a.' },
+                ].map((it, i) => (
+                  <div key={i} className="flex gap-3">
+                    <div className="w-2 h-2 rounded-full bg-blue-600 mt-2 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium text-gray-900 text-sm">{it.title}</p>
+                      <p className="text-sm text-gray-600">{it.desc}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            {sent ? (
-              <div className="bg-green-50 border border-green-200 rounded-2xl p-8 text-center h-full flex flex-col justify-center">
-                <p className="text-lg font-semibold text-green-800">Mèsi!</p>
-                <p className="text-sm text-green-600 mt-2">
-                  Nou resevwa mesaj ou. N ap reponn ou byen vit.
-                </p>
-                <button onClick={() => setSent(false)}
-                  className="mt-5 px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 mx-auto">
-                  Voye yon lòt mesaj
-                </button>
+                ))}
               </div>
-            ) : (
-              <form onSubmit={sendContact}
-                className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
+            </div>
 
-                {/* Honeypot — moun pa wè l, bot ranpli l */}
-                <div className="hidden" aria-hidden="true">
-                  <label htmlFor="website">Website</label>
-                  <input
-                    type="text"
-                    id="website"
-                    name="website"
-                    tabIndex={-1}
-                    autoComplete="off"
-                    value={form.website}
-                    onChange={e => setForm({ ...form, website: e.target.value })}
-                  />
+            <div>
+              {sent ? (
+                <div className="bg-green-50 border border-green-200 rounded-2xl p-8 text-center h-full flex flex-col justify-center">
+                  <p className="text-lg font-semibold text-green-800">Mèsi!</p>
+                  <p className="text-sm text-green-600 mt-2">
+                    Nou resevwa mesaj ou. N ap reponn ou byen vit.
+                  </p>
+                  <button onClick={() => setSent(false)}
+                    className="mt-5 px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 mx-auto">
+                    Voye yon lòt mesaj
+                  </button>
                 </div>
+              ) : (
+                <form onSubmit={sendContact}
+                  className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-600 font-medium">Non ou *</label>
-                    <input required placeholder="Non konplè"
-                      className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                  <div className="hidden" aria-hidden="true">
+                    <label htmlFor="website">Website</label>
+                    <input
+                      type="text"
+                      id="website"
+                      name="website"
+                      tabIndex={-1}
+                      autoComplete="off"
+                      value={form.website}
+                      onChange={e => setForm({ ...form, website: e.target.value })}
+                    />
                   </div>
-                  <div>
-                    <label className="text-xs text-gray-600 font-medium">Non biznis ou</label>
-                    <input placeholder="Opsyonèl"
-                      className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-600 font-medium">Non ou *</label>
+                      <input required placeholder="Non konplè"
+                        className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 font-medium">Non biznis ou</label>
+                      <input placeholder="Opsyonèl"
+                        className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={form.business_name} onChange={e => setForm({ ...form, business_name: e.target.value })} />
+                    </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs text-gray-600 font-medium">Telefòn</label>
-                    <input type="tel" placeholder="+509 ..."
-                      className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-600 font-medium">Telefòn</label>
+                      <input type="tel" placeholder="+509 ..."
+                        className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600 font-medium">Imèl</label>
+                      <input type="email" placeholder="imel@egzanp.com"
+                        className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                    </div>
                   </div>
+                  <p className="text-xs text-gray-400 -mt-2">
+                    Bay omwen youn nan de a pou nou ka reponn ou.
+                  </p>
+
                   <div>
-                    <label className="text-xs text-gray-600 font-medium">Imèl</label>
-                    <input type="email" placeholder="imel@egzanp.com"
+                    <label className="text-xs text-gray-600 font-medium">Mesaj ou *</label>
+                    <textarea required rows={5} placeholder="Ekri kesyon ou isit la..."
                       className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} />
+                      value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} />
                   </div>
-                </div>
-                <p className="text-xs text-gray-400 -mt-2">
-                  Bay omwen youn nan de a pou nou ka reponn ou.
-                </p>
 
-                <div>
-                  <label className="text-xs text-gray-600 font-medium">Mesaj ou *</label>
-                  <textarea required rows={5} placeholder="Ekri kesyon ou isit la..."
-                    className="w-full mt-1 px-3 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={form.message} onChange={e => setForm({ ...form, message: e.target.value })} />
-                </div>
+                  {err && (
+                    <div className="text-sm rounded-lg p-3 bg-red-50 text-red-700">{err}</div>
+                  )}
 
-                {err && (
-                  <div className="text-sm rounded-lg p-3 bg-red-50 text-red-700">{err}</div>
-                )}
-
-                <button type="submit" disabled={sending}
-                  className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-                  {sending ? 'Ap voye...' : 'Voye mesaj la'}
-                </button>
-              </form>
-            )}
+                  <button type="submit" disabled={sending}
+                    className="w-full py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                    {sending ? 'Ap voye...' : 'Voye mesaj la'}
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ===== APEL FINAL ===== */}
-      <section className="bg-gray-900">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-16 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-white">
+      {/* ===== APEL FINAL (fon fonse) ===== */}
+      <section className="bg-slate-900 relative overflow-hidden">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,rgba(37,99,235,0.15),transparent_60%)]" />
+        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 py-20 text-center">
+          <h2 className="text-2xl sm:text-4xl font-bold text-white">
             Pare pou pran kontròl biznis ou?
           </h2>
-          <p className="text-gray-400 mt-3">
+          <p className="text-gray-400 mt-4 text-lg">
             Kreye kont ou nan de minit. Pa gen kat kredi, pa gen angajman.
           </p>
           <a href="/register"
-            className="inline-block mt-8 px-8 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 shadow-lg shadow-blue-600/25">
-            Kreye kont gratis
+            className="group inline-flex items-center justify-center gap-2 mt-8 px-8 py-4 bg-blue-600 text-white rounded-xl text-base font-semibold hover:bg-blue-700 shadow-lg shadow-blue-600/30 transition-all hover:shadow-xl hover:shadow-blue-600/40">
+            Kòmanse 14 jou gratis
+            <ArrowRight className="transition-transform group-hover:translate-x-1" />
           </a>
+          <p className="text-sm text-gray-500 mt-4">
+            Pa gen kat kredi bezwen · Konfigirasyon an 2 minit
+          </p>
         </div>
       </section>
 
       {/* ===== PYE PAJ ===== */}
-      <footer className="bg-gray-950 text-gray-400">
+      <footer className="bg-slate-950 text-gray-400">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
             <div>
@@ -661,18 +731,18 @@ export default function LandingPage() {
             <div>
               <p className="text-white font-medium text-sm">Lyen</p>
               <div className="mt-3 space-y-2 text-sm">
-                <a href="#fonksyonalite" className="block hover:text-white">Fonksyonalite</a>
-                <a href="#tarif" className="block hover:text-white">Tarif</a>
-                <a href="/login" className="block hover:text-white">Konekte</a>
-                <a href="/register" className="block hover:text-white">Kreye yon kont</a>
+                <a href="#fonksyonalite" className="block hover:text-white transition-colors">Fonksyonalite</a>
+                <a href="#tarif" className="block hover:text-white transition-colors">Tarif</a>
+                <a href="/login" className="block hover:text-white transition-colors">Konekte</a>
+                <a href="/register" className="block hover:text-white transition-colors">Kreye yon kont</a>
               </div>
             </div>
             <div>
               <p className="text-white font-medium text-sm">Legal &amp; Kontak</p>
               <div className="mt-3 space-y-2 text-sm">
-                <a href="/legal/privacy" className="block hover:text-white">Politik Konfidansyalite</a>
-                <a href="/legal/terms" className="block hover:text-white">Kondisyon Itilizasyon</a>
-                <a href="#kontak" className="block hover:text-white">Kontakte nou</a>
+                <a href="/legal/privacy" className="block hover:text-white transition-colors">Politik Konfidansyalite</a>
+                <a href="/legal/terms" className="block hover:text-white transition-colors">Kondisyon Itilizasyon</a>
+                <a href="#kontak" className="block hover:text-white transition-colors">Kontakte nou</a>
                 <p>Gonaïves, Ayiti</p>
               </div>
             </div>

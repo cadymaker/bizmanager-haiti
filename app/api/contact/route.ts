@@ -34,9 +34,9 @@ function isRateLimited(ip: string): boolean {
 
   // Netwaye antre ki vye (evite memwa a grandi san rete)
   if (hits.size > 5000) {
-    for (const [k, v] of hits) {
+    Array.from(hits.entries()).forEach(([k, v]) => {
       if (v.every(t => now - t >= RATE_WINDOW_MS)) hits.delete(k);
-    }
+    });
   }
 
   return false;
