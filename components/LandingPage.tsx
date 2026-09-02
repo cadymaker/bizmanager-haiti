@@ -10,7 +10,7 @@ const FEATURES = [
   {
     icon: '📴',
     title: 'Mache san entènèt',
-    desc: 'Kontinye vann menm lè koneksyon an koupe. Vant yo senkronize otomatikman lè entènèt tounen.',
+    desc: 'Kontinye vann menm lè koneksyon an koupe. Vant yo sinkronize otomatikman lè entènèt tounen.',
   },
   {
     icon: '💰',
@@ -73,7 +73,7 @@ const FAQ = [
   },
   {
     q: 'Ki kalite biznis ki ka itilize l?',
-    a: 'Boutik, sal fitness, pafimri, episri, famasi, magazen pyès, nenpòt ti komès ki vann pwodwi oswa sèvis epi ki bezwen swiv kès, stock, ak kliyan.',
+    a: 'Boutik, sal fitness, pafimri, episri, famasi, magazen pyès — nenpòt ti komès ki vann pwodwi oswa sèvis epi ki bezwen swiv kès, stock, ak kliyan.',
   },
 ];
 
@@ -85,7 +85,7 @@ const APP_SCHEMA = {
   applicationCategory: 'BusinessApplication',
   operatingSystem: 'Android, iOS, Web',
   description:
-    'Lojisyèl POS ak jesyon pou biznis an Ayiti. Vant ak barcode, kès, stock, fakti, ak rapò mache menm san entènèt.',
+    'Lojisyèl POS ak jesyon pou ti komès an Ayiti. Vant ak barcode, kès, stock, fakti, ak rapò — mache menm san entènèt.',
   url: 'https://www.bizmanagerhaiti.com',
   inLanguage: 'ht',
   offers: {
@@ -106,10 +106,11 @@ const APP_SCHEMA = {
     '@type': 'Organization',
     name: 'BizManager Haiti',
     url: 'https://www.bizmanagerhaiti.com',
-         address: {
-        '@type': 'PostalAddress',
-        addressCountry: 'HT',
-      },
+    address: {
+      '@type': 'PostalAddress',
+      addressLocality: 'Gonaïves',
+      addressCountry: 'HT',
+    },
   },
 };
 
@@ -219,7 +220,7 @@ export default function LandingPage() {
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   const [form, setForm] = useState({
-    name: '', phone: '', email: '', business_name: '', message: '',
+    name: '', phone: '', email: '', business_name: '', message: '', website: '',
   });
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
@@ -243,7 +244,7 @@ export default function LandingPage() {
       return;
     }
 
-    setForm({ name: '', phone: '', email: '', business_name: '', message: '' });
+    setForm({ name: '', phone: '', email: '', business_name: '', message: '', website: '' });
     setSent(true);
   }
 
@@ -303,7 +304,7 @@ export default function LandingPage() {
 
               <p className="text-lg text-gray-600 mt-5 leading-relaxed">
                 Lojisyèl jesyon ki fèt pou ti komès ayisyen. Vant, stock, kès, fakti,
-                ak rapò, tout nan yon sèl kote,
+                ak rapò — tout nan yon sèl kote,
                 <strong className="text-gray-900"> menm lè entènèt la koupe</strong>.
               </p>
 
@@ -377,7 +378,7 @@ export default function LandingPage() {
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Fonksyonalite</p>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-            Tout sa yon biznis bezwen
+            Tout sa yon ti komès bezwen
           </h2>
           <p className="text-gray-600 mt-3">
             Pa gen bagay konplike. Chak fonksyonalite fèt pou reyalite biznis an Ayiti.
@@ -412,10 +413,10 @@ export default function LandingPage() {
               </h2>
               <p className="text-blue-100 mt-5 text-lg leading-relaxed">
                 Lè koneksyon an ale, ou kontinye eskane pwodwi, fè vant, epi bay kliyan resi.
-                Lè entènèt tounen, tout bagay senkronize otomatikman, ou pa pèdi yon sèl vant.
+                Lè entènèt tounen, tout bagay sinkronize otomatikman — ou pa pèdi yon sèl vant.
               </p>
               <div className="flex flex-wrap gap-3 mt-7">
-                {['Eskane barcode', 'Fè vant', 'Bay resi', 'Senkronize otomatikman'].map((t, i) => (
+                {['Eskane barcode', 'Fè vant', 'Bay resi', 'Sinkronize otomatikman'].map((t, i) => (
                   <span key={i} className="bg-white/15 text-white text-sm px-3 py-1.5 rounded-lg backdrop-blur">
                     {t}
                   </span>
@@ -434,7 +435,7 @@ export default function LandingPage() {
         <div className="text-center max-w-2xl mx-auto">
           <p className="text-sm font-semibold text-blue-600 uppercase tracking-wide">Tarif</p>
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 mt-2">
-            Yon pri ki fè sans pou biznis lokal yo
+            Yon pri ki fè sans pou ti komès
           </h2>
           <p className="text-gray-600 mt-3">
             Kòmanse ak <strong className="text-gray-900">14 jou gratis</strong>.
@@ -559,6 +560,21 @@ export default function LandingPage() {
             ) : (
               <form onSubmit={sendContact}
                 className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm space-y-4">
+
+                {/* Honeypot — moun pa wè l, bot ranpli l */}
+                <div className="hidden" aria-hidden="true">
+                  <label htmlFor="website">Website</label>
+                  <input
+                    type="text"
+                    id="website"
+                    name="website"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    value={form.website}
+                    onChange={e => setForm({ ...form, website: e.target.value })}
+                  />
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs text-gray-600 font-medium">Non ou *</label>
@@ -639,7 +655,7 @@ export default function LandingPage() {
                 <p className="text-white font-bold">BizManager Haiti</p>
               </div>
               <p className="text-sm mt-3 leading-relaxed">
-                Lojisyèl jesyon pou biznis ayisyen. Fèt an Ayiti, pou Ayiti.
+                Lojisyèl jesyon pou ti komès ayisyen. Fèt an Ayiti, pou Ayiti.
               </p>
             </div>
             <div>
@@ -657,7 +673,7 @@ export default function LandingPage() {
                 <a href="/legal/privacy" className="block hover:text-white">Politik Konfidansyalite</a>
                 <a href="/legal/terms" className="block hover:text-white">Kondisyon Itilizasyon</a>
                 <a href="#kontak" className="block hover:text-white">Kontakte nou</a>
-               <p>Ayiti</p>
+                <p>Gonaïves, Ayiti</p>
               </div>
             </div>
           </div>
