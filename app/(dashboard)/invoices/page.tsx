@@ -34,7 +34,6 @@ interface Invoice {
   client: { name?: string } | null;
 }
 
-// Dat san pwoblèm timezone pou AFICHE: pran sèlman pati dat la (YYYY-MM-DD)
 function formatInvoiceDate(dateStr: string): string {
   const datePart = (dateStr || '').split('T')[0];
   const [y, m, d] = datePart.split('-').map(Number);
@@ -43,7 +42,6 @@ function formatInvoiceDate(dateStr: string): string {
   return `${pad(d)}/${pad(m)}/${y}`;
 }
 
-// Dat jodi a nan lè LOKAL la (Ayiti), pa an UTC.
 function todayLocalDate(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -151,7 +149,6 @@ export default function InvoicesPage() {
 
   const subtotal = items.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
 
-  // ===== Kalkile rabè a =====
   function computeDiscount(): { amount: number; type: string | null; value: number } {
     if (discountMode === 'promo' && appliedPromo) {
       const amt = appliedPromo.discount_type === 'percent'
@@ -240,7 +237,6 @@ export default function InvoicesPage() {
 
     const rawTotal = validItems.reduce((s, it) => s + (it.quantity * it.unit_price), 0);
 
-    // Rekalkile rabè a sou atik valab yo
     let discAmount = 0;
     if (discountMode === 'promo' && appliedPromo) {
       discAmount = appliedPromo.discount_type === 'percent'
@@ -290,19 +286,16 @@ export default function InvoicesPage() {
       return;
     }
 
+    // Desann stock la atravè fonksyon sekirize a
     for (const it of validItems) {
       if (it.product_id) {
-        const prod = products.find(p => p.id === it.product_id);
-        if (prod) {
-          await supabase
-            .from('products')
-            .update({ quantity: prod.quantity - it.quantity })
-            .eq('id', it.product_id);
-        }
+        await supabase.rpc('decrement_stock', {
+          p_product_id: it.product_id,
+          p_quantity: it.quantity,
+        });
       }
     }
 
-    // Konte itilizasyon promo a
     if (promoCode && appliedPromo) {
       const { data: pr } = await supabase
         .from('promotions')
@@ -347,7 +340,7 @@ export default function InvoicesPage() {
       {lastCreatedId && (
         <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
-            <p className="font-medium text-green-800">✓ Fakti kreye ak siksè!</p>
+            <p className="font-medium text-green-800">Fakti kreye ak siksè!</p>
             <p className="text-sm text-green-600 mt-0.5">Ou ka voye l bay kliyan an kounye a.</p>
           </div>
           <div className="flex gap-2">
@@ -410,7 +403,7 @@ export default function InvoicesPage() {
                     <span className="w-24 text-sm text-gray-600 text-right">{fmt(it.quantity * it.unit_price)}</span>
                     {items.length > 1 && (
                       <button type="button" onClick={() => removeItem(i)}
-                        className="text-red-500 text-sm px-2">✕</button>
+                        className="text-red-500 text-sm px-2">x</button>
                     )}
                   </div>
                 </div>
@@ -438,7 +431,7 @@ export default function InvoicesPage() {
                 </button>
                 <button type="button" onClick={() => setDiscountMode('promo')}
                   className="py-2 rounded-lg text-sm font-medium border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">
-                  🎟️ Kòd promo
+                  Kòd promo
                 </button>
               </div>
             )}
@@ -477,7 +470,7 @@ export default function InvoicesPage() {
               <div className="space-y-2">
                 {appliedPromo ? (
                   <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800">
-                    ✓ <strong>{appliedPromo.code}</strong>
+                    <strong>{appliedPromo.code}</strong>
                     {appliedPromo.label && <span> — {appliedPromo.label}</span>}
                     <div className="text-xs mt-0.5">
                       {appliedPromo.discount_type === 'percent'
@@ -519,7 +512,7 @@ export default function InvoicesPage() {
                   Rabè {discountMode === 'promo' && appliedPromo ? `(${appliedPromo.code})` : ''}:
                 </span>
                 <span className="text-sm font-medium text-green-700 w-28 text-right">
-                  − {fmt(discount.amount)}
+                  - {fmt(discount.amount)}
                 </span>
               </div>
             )}

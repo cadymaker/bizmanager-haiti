@@ -321,7 +321,7 @@ export default function PosPage() {
     if (!isOff && queueCount(bid) > 0 && !syncing) {
       const res = await syncQueue(bid);
       if (res.ok > 0) {
-        setSyncMsg(`✓ ${res.ok} vant voye sou sèvè a.`);
+        setSyncMsg(`${res.ok} vant voye sou sèvè a.`);
         setTimeout(() => setSyncMsg(''), 5000);
         const fresh = await withTimeout(
           supabase
@@ -425,18 +425,12 @@ export default function PosPage() {
           session_id: sale.session_id,
         });
 
+        // Desann stock la atravè fonksyon sekirize a
         for (const it of sale.items) {
-          const { data: prod } = await supabase
-            .from('products')
-            .select('quantity')
-            .eq('id', it.product_id)
-            .single();
-          if (prod) {
-            await supabase
-              .from('products')
-              .update({ quantity: Math.max(0, Number(prod.quantity) - it.quantity) })
-              .eq('id', it.product_id);
-          }
+          await supabase.rpc('decrement_stock', {
+            p_product_id: it.product_id,
+            p_quantity: it.quantity,
+          });
         }
 
         removeFromQueue(bid, sale.local_id);
@@ -457,7 +451,7 @@ export default function PosPage() {
     setSyncMsg('');
     const res = await syncQueue(businessId);
     if (res.ok > 0) {
-      setSyncMsg(`✓ ${res.ok} vant voye sou sèvè a.`);
+      setSyncMsg(`${res.ok} vant voye sou sèvè a.`);
       setTimeout(() => setSyncMsg(''), 5000);
     }
     if (res.failed > 0) {
@@ -546,7 +540,7 @@ export default function PosPage() {
 
     beepSuccess();
     addToCart(prod);
-    setScanMsg({ type: 'success', text: `✓ ${prod.name} ajoute nan panye a` });
+    setScanMsg({ type: 'success', text: `${prod.name} ajoute nan panye a` });
   }
 
   useEffect(() => {
@@ -850,14 +844,12 @@ export default function PosPage() {
       session_id: session.id,
     });
 
+    // Desann stock la atravè fonksyon sekirize a
     for (const it of cart) {
-      const prod = products.find(p => p.id === it.product_id);
-      if (prod) {
-        await supabase
-          .from('products')
-          .update({ quantity: prod.quantity - it.quantity })
-          .eq('id', it.product_id);
-      }
+      await supabase.rpc('decrement_stock', {
+        p_product_id: it.product_id,
+        p_quantity: it.quantity,
+      });
     }
 
     if (promoCode && appliedPromo) {
@@ -1015,18 +1007,18 @@ export default function PosPage() {
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                 offline ? 'bg-orange-100 text-orange-700' : 'bg-emerald-100 text-emerald-700'
               }`}>
-                {offline ? '⚠ Offline' : '● An liy'}
+                {offline ? 'Offline' : 'An liy'}
               </span>
             </div>
             {session ? (
               <button onClick={openCloseModal}
                 className="px-3 py-1.5 bg-amber-100 text-amber-800 rounded-lg text-xs font-medium hover:bg-amber-200 whitespace-nowrap">
-                🔒 Fèmen Kès
+                Fèmen Kès
               </button>
             ) : (
               <button onClick={() => setShowOpenModal(true)}
                 className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-lg text-xs font-medium hover:bg-emerald-200 whitespace-nowrap">
-                🔓 Ouvri Kès
+                Ouvri Kès
               </button>
             )}
           </div>
@@ -1041,7 +1033,7 @@ export default function PosPage() {
           {pendingCount > 0 && (
             <div className="mb-2 bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 text-sm text-blue-800 flex items-center justify-between gap-2">
               <span>
-                📤 <strong>{pendingCount}</strong> vant k ap tann pou voye sou sèvè a.
+                <strong>{pendingCount}</strong> vant k ap tann pou voye sou sèvè a.
               </span>
               {!offline && (
                 <button onClick={syncNow} disabled={syncing}
@@ -1102,7 +1094,7 @@ export default function PosPage() {
             onClick={openScanner}
             className="w-full mb-2 px-4 py-2.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg text-sm font-medium hover:bg-indigo-100 flex items-center justify-center gap-2"
           >
-            📷 Eskane ak kamera
+            Eskane ak kamera
           </button>
 
           {scanMsg && (
@@ -1180,7 +1172,7 @@ export default function PosPage() {
                   <div className="flex justify-between items-start gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-sm text-gray-800 truncate">{it.name}</div>
-                      <div className="text-xs text-gray-400">{fmt(it.unit_price)} × {it.quantity}</div>
+                      <div className="text-xs text-gray-400">{fmt(it.unit_price)} x {it.quantity}</div>
                     </div>
                     <div className="text-sm font-semibold text-gray-800 whitespace-nowrap">
                       {fmt(it.unit_price * it.quantity)}
@@ -1188,7 +1180,7 @@ export default function PosPage() {
                   </div>
                   <div className="flex items-center gap-2 mt-2">
                     <button onClick={() => changeQty(it.product_id, -1)}
-                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200">−</button>
+                      className="w-7 h-7 rounded-lg bg-gray-100 text-gray-700 font-bold hover:bg-gray-200">-</button>
                     <span className="w-8 text-center text-sm font-medium">{it.quantity}</span>
                     <button onClick={() => changeQty(it.product_id, 1)}
                       disabled={it.quantity >= it.stock}
@@ -1216,7 +1208,7 @@ export default function PosPage() {
                 <span className="text-green-700">
                   Rabè {discountMode === 'promo' && appliedPromo ? `(${appliedPromo.code})` : ''}
                 </span>
-                <span className="text-green-700 font-medium">− {fmt(discount.amount)}</span>
+                <span className="text-green-700 font-medium">- {fmt(discount.amount)}</span>
               </div>
             </>
           )}
@@ -1297,8 +1289,8 @@ export default function PosPage() {
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 print:hidden">
           <div className="bg-white rounded-2xl w-full max-w-md overflow-hidden">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center">
-              <h2 className="font-semibold text-gray-800">📷 Eskane pwodwi</h2>
-              <button onClick={closeScanner} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <h2 className="font-semibold text-gray-800">Eskane pwodwi</h2>
+              <button onClick={closeScanner} className="text-gray-400 hover:text-gray-700 text-xl leading-none">x</button>
             </div>
 
             <div className="p-4">
@@ -1326,7 +1318,7 @@ export default function PosPage() {
 
             <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between gap-3">
               <div className="text-sm text-gray-600">
-                Panye: <strong className="text-gray-900">{itemCount}</strong> atik • <strong className="text-gray-900">{fmt(total)}</strong>
+                Panye: <strong className="text-gray-900">{itemCount}</strong> atik · <strong className="text-gray-900">{fmt(total)}</strong>
               </div>
               <button onClick={closeScanner}
                 className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black">
@@ -1368,7 +1360,7 @@ export default function PosPage() {
                   </button>
                   <button onClick={() => setDiscountMode('promo')}
                     className="py-2 rounded-lg text-sm font-medium border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100">
-                    🎟️ Kòd promo
+                    Kòd promo
                   </button>
                 </div>
               )}
@@ -1408,7 +1400,7 @@ export default function PosPage() {
                 <div className="space-y-2">
                   {appliedPromo ? (
                     <div className="bg-purple-50 border border-purple-200 rounded-lg px-3 py-2 text-sm text-purple-800">
-                      ✓ <strong>{appliedPromo.code}</strong>
+                      <strong>{appliedPromo.code}</strong>
                       {appliedPromo.label && <span> — {appliedPromo.label}</span>}
                       <div className="text-xs mt-0.5">
                         {appliedPromo.discount_type === 'percent'
@@ -1450,7 +1442,7 @@ export default function PosPage() {
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-green-700">Rabè</span>
-                    <span className="text-green-700 font-medium">− {fmt(discount.amount)}</span>
+                    <span className="text-green-700 font-medium">- {fmt(discount.amount)}</span>
                   </div>
                   <div className="border-t border-gray-200 my-1"></div>
                 </>
@@ -1594,26 +1586,26 @@ export default function PosPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block">
           <div className="bg-white rounded-2xl w-full max-w-sm my-4 print:rounded-none print:max-w-none print:my-0">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center print:hidden">
-              <h2 className="font-semibold text-gray-800">✓ Kès fèmen</h2>
-              <button onClick={closeZReport} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <h2 className="font-semibold text-gray-800">Kès fèmen</h2>
+              <button onClick={closeZReport} className="text-gray-400 hover:text-gray-700 text-xl leading-none">x</button>
             </div>
 
             <div id="receipt-print" className="receipt-ticket">
               <div className="text-center">
                 <div className="biz-name">{biz?.business_name}</div>
-                <div className="line">RAPÒ FÈMTI KÈS (Z)</div>
+                <div className="line">RAPO FEMTI KES (Z)</div>
               </div>
 
               <div className="divider"></div>
 
               <div className="line">Kesye: {zReport.cashierName}</div>
-              <div className="line">Ouvèti: {fmtDateTime(zReport.openedAt)}</div>
-              <div className="line">Fèmti: {fmtDateTime(zReport.closedAt)}</div>
+              <div className="line">Ouveti: {fmtDateTime(zReport.openedAt)}</div>
+              <div className="line">Femti: {fmtDateTime(zReport.closedAt)}</div>
 
               <div className="divider"></div>
 
               <div className="item-row">
-                <span>Fon de kès</span>
+                <span>Fon de kes</span>
                 <span>{fmt(zReport.openingAmount)}</span>
               </div>
               <div className="item-row">
@@ -1621,7 +1613,7 @@ export default function PosPage() {
                 <span>{fmt(zReport.totalCashSales)}</span>
               </div>
               <div className="item-row">
-                <span>Sòti espès</span>
+                <span>Soti espes</span>
                 <span>- {fmt(zReport.cashOut)}</span>
               </div>
 
@@ -1632,7 +1624,7 @@ export default function PosPage() {
                 <span>{fmt(zReport.expected)}</span>
               </div>
               <div className="item-row">
-                <span>Kòb konte</span>
+                <span>Kob konte</span>
                 <span>{fmt(zReport.counted)}</span>
               </div>
               <div className="total-row">
@@ -1643,7 +1635,7 @@ export default function PosPage() {
               <div className="divider"></div>
 
               <div className="text-center footer-text">
-                {zReport.ecart === 0 ? 'Kès la balanse.' : zReport.ecart < 0 ? 'Kès la manke kòb.' : 'Kès la gen twòp kòb.'}
+                {zReport.ecart === 0 ? 'Kes la balanse.' : zReport.ecart < 0 ? 'Kes la manke kob.' : 'Kes la gen twop kob.'}
               </div>
             </div>
 
@@ -1666,8 +1658,8 @@ export default function PosPage() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto print:bg-white print:p-0 print:block">
           <div className="bg-white rounded-2xl w-full max-w-sm my-4 print:rounded-none print:max-w-none print:my-0">
             <div className="p-4 border-b border-gray-100 flex justify-between items-center print:hidden">
-              <h2 className="font-semibold text-gray-800">✓ Vant fini</h2>
-              <button onClick={closeReceipt} className="text-gray-400 hover:text-gray-700 text-xl leading-none">×</button>
+              <h2 className="font-semibold text-gray-800">Vant fini</h2>
+              <button onClick={closeReceipt} className="text-gray-400 hover:text-gray-700 text-xl leading-none">x</button>
             </div>
 
             <div id="receipt-print" className="receipt-ticket">
@@ -1683,7 +1675,7 @@ export default function PosPage() {
 
               <div className="line">Resi: {receipt.invoiceNumber}</div>
               {receipt.invoiceNumber.startsWith('OFF-') && (
-                <div className="line">(resi tanporè — offline)</div>
+                <div className="line">(resi tanpore — offline)</div>
               )}
               <div className="line">Dat: {receipt.dateTime}</div>
               <div className="line">Kesye: {receipt.cashierName}</div>
@@ -1709,7 +1701,7 @@ export default function PosPage() {
                     <span>{fmt(receipt.subtotal)}</span>
                   </div>
                   <div className="item-row">
-                    <span>Rabè{receipt.promoCode ? ` (${receipt.promoCode})` : ''}</span>
+                    <span>Rabe{receipt.promoCode ? ` (${receipt.promoCode})` : ''}</span>
                     <span>- {fmt(receipt.discountAmount)}</span>
                   </div>
                 </>
@@ -1720,19 +1712,19 @@ export default function PosPage() {
                 <span>{fmt(receipt.total)}</span>
               </div>
               <div className="item-row">
-                <span>Kòb bay</span>
+                <span>Kob bay</span>
                 <span>{fmt(receipt.cashGiven)}</span>
               </div>
               <div className="item-row">
-                <span>Monè</span>
+                <span>Mone</span>
                 <span>{fmt(receipt.change)}</span>
               </div>
 
               <div className="divider"></div>
 
               <div className="text-center footer-text">
-                Mèsi pou konfyans ou!<br />
-                Nou espere wè w ankò.
+                Mesi pou konfyans ou!<br />
+                Nou espere we w anko.
               </div>
             </div>
 
