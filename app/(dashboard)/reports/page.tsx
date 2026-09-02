@@ -57,6 +57,7 @@ export default function ReportsPage() {
   const [totalDiscount, setTotalDiscount] = useState(0);
   const [topItems, setTopItems] = useState<SoldItem[]>([]);
   const [dayPoints, setDayPoints] = useState<DayPoint[]>([]);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => { load(); }, [period]);
 
@@ -66,7 +67,6 @@ export default function ReportsPage() {
     const ctx = await getBusinessContext();
     if (!ctx) { setLoading(false); return; }
 
-    // Devise
     const { data: biz } = await supabase
       .from('businesses')
       .select('currency')
@@ -74,7 +74,6 @@ export default function ReportsPage() {
       .single();
     setCurrency(biz?.currency ?? 'HTG');
 
-    // Kalkile bòn peryòd la (dat lokal)
     const cfg = PERIODS.find(p => p.value === period) ?? PERIODS[0];
     const end = new Date();
     const start = new Date();
@@ -112,17 +111,13 @@ export default function ReportsPage() {
       sales += amt;
       dayMap.set(inv.issue_date, (dayMap.get(inv.issue_date) ?? 0) + amt);
 
-      // Rabè a: nan kolòn nan (nouvo fakti) oswa nan metadata (ansyen fakti)
-            // Ansyen fakti gen rabè a nan metadata; nouvo yo gen kolòn nan.
-      // Kolòn nan gen default 0, kidonk nou pran metadata a lè li se 0.
-      const colDisc = Number(inv.discount_amount || 0);
-      const metaDisc = Number(inv.metadata?.discount || 0);
-      const discAmount = colDisc > 0 ? colDisc : metaDisc;
+      const discAmount = Number(
+        inv.discount_amount ?? inv.metadata?.discount ?? 0
+      );
       discountSum += discAmount;
 
       const items = inv.metadata?.items;
       if (Array.isArray(items)) {
-        // Soutotal atik yo (anvan rabè)
         const itemsSum = items.reduce(
           (s: number, it: any) => s + Number(it.total || 0), 0
         );
@@ -157,14 +152,12 @@ export default function ReportsPage() {
     setTotalDiscount(discountSum);
     setSaleCount((invoices ?? []).length);
 
-    // Top 10 pwodwi (pa kantite vann)
     setTopItems(
       Array.from(itemMap.values())
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 10)
     );
 
-    // Vant pa jou (tout jou nan peryòd la, menm sa ki vid)
     const points: DayPoint[] = [];
     for (let i = cfg.days; i >= 0; i--) {
       const d = new Date();
@@ -214,48 +207,88 @@ export default function ReportsPage() {
   const maxDay = Math.max(...dayPoints.map(p => p.total), 1);
   const periodLabel = PERIODS.find(p => p.value === period)?.label ?? '';
 
-  // Ekspòte CSV (separatè ';' pou Excel franse, chif san gimè)
-  function exportCSV() {
-    const txt = (v: any) => `"${String(v).replace(/"/g, '""')}"`;
-    const num = (v: number) => String(Math.round(Number(v) * 100) / 100);
+  // Ekspòte yon vrè fichye Excel ak plizyè fèy
+  async function exportExcel() {
+    setExporting(true);
+    try {
+      const XLSX = await import('xlsx');
 
-    const rows: string[][] = [];
-    rows.push([txt('Rapò BizManager'), txt(periodLabel)]);
-    rows.push([]);
-    rows.push([txt('REZIME')]);
-    rows.push([txt('Vant total'), num(totalSales)]);
-    rows.push([txt('Rabè bay kliyan'), num(totalDiscount)]);
-    rows.push([txt('Kou pwodwi vann'), num(totalCost)]);
-    rows.push([txt('Depans'), num(totalExpenses)]);
-    rows.push([txt('Pèt nan stock'), num(totalLoss)]);
-    rows.push([txt('Benefis nèt'), num(netProfit)]);
-    rows.push([txt('Kantite vant'), num(saleCount)]);
-    rows.push([]);
-    rows.push([txt('TOP PWODWI')]);
-    rows.push([txt('Pwodwi'), txt('Kantite vann'), txt('Revni'), txt('Kou'), txt('Benefis')]);
-    topItems.forEach(it => {
-      rows.push([
-        txt(it.name),
-        num(it.quantity),
-        num(it.revenue),
-        num(it.cost),
-        num(it.revenue - it.cost),
-      ]);
-    });
-    rows.push([]);
-    rows.push([txt('VANT PA JOU')]);
-    rows.push([txt('Dat'), txt('Total')]);
-    dayPoints.forEach(p => rows.push([txt(p.date), num(p.total)]));
+      const num = (v: number) => Math.round(Number(v) * 100) / 100;
 
-    const csv = 'sep=;\n' + rows.map(r => r.join(';')).join('\n');
+      // ===== FÈY 1: Rezime =====
+      const summaryRows: any[][] = [
+        ['RAPÒ BIZMANAGER'],
+        ['Peryòd', periodLabel],
+        ['Dat rapò a', new Date().toLocaleDateString('fr-HT')],
+        ['Devise', currency],
+        [],
+        ['REZIME FINANSYE'],
+        ['Vant total', num(totalSales)],
+        ['Rabè bay kliyan', num(totalDiscount)],
+        ['Kou pwodwi vann yo', num(totalCost)],
+        ['Depans', num(totalExpenses)],
+        ['Pèt nan stock', num(totalLoss)],
+        ['BENEFIS NÈT', num(netProfit)],
+        [],
+        ['Kantite vant', saleCount],
+      ];
 
-    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `rapo-bizmanager-${period}-${localDate(new Date())}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+      const wsSummary = XLSX.utils.aoa_to_sheet(summaryRows);
+      wsSummary['!cols'] = [{ wch: 26 }, { wch: 18 }];
+
+      // ===== FÈY 2: Top pwodwi =====
+      const productRows: any[][] = [
+        ['Pwodwi', 'Kantite vann', 'Revni', 'Kou', 'Benefis'],
+        ...topItems.map(it => [
+          it.name,
+          num(it.quantity),
+          num(it.revenue),
+          num(it.cost),
+          num(it.revenue - it.cost),
+        ]),
+      ];
+
+      if (topItems.length > 0) {
+        productRows.push([]);
+        productRows.push([
+          'TOTAL',
+          num(topItems.reduce((s, it) => s + it.quantity, 0)),
+          num(topItems.reduce((s, it) => s + it.revenue, 0)),
+          num(topItems.reduce((s, it) => s + it.cost, 0)),
+          num(topItems.reduce((s, it) => s + (it.revenue - it.cost), 0)),
+        ]);
+      }
+
+      const wsProducts = XLSX.utils.aoa_to_sheet(productRows);
+      wsProducts['!cols'] = [
+        { wch: 32 }, { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 14 },
+      ];
+
+      // ===== FÈY 3: Vant pa jou =====
+      const dayRows: any[][] = [
+        ['Dat', 'Total vant'],
+        ...dayPoints.map(p => [p.date, num(p.total)]),
+      ];
+
+      if (dayPoints.length > 0) {
+        dayRows.push([]);
+        dayRows.push(['TOTAL', num(dayPoints.reduce((s, p) => s + p.total, 0))]);
+      }
+
+      const wsDays = XLSX.utils.aoa_to_sheet(dayRows);
+      wsDays['!cols'] = [{ wch: 16 }, { wch: 16 }];
+
+      // ===== Bati klasè a =====
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsSummary, 'Rezime');
+      XLSX.utils.book_append_sheet(wb, wsProducts, 'Top pwodwi');
+      XLSX.utils.book_append_sheet(wb, wsDays, 'Vant pa jou');
+
+      XLSX.writeFile(wb, `rapo-bizmanager-${period}-${localDate(new Date())}.xlsx`);
+    } catch (e) {
+      /* inyore — ekspòtasyon pa esansyèl */
+    }
+    setExporting(false);
   }
 
   return (
@@ -265,9 +298,9 @@ export default function ReportsPage() {
           <h1 className="text-2xl font-semibold text-gray-900">Rapò &amp; Statistik</h1>
           <p className="text-sm text-gray-500 mt-1">Analiz vant, benefis, ak pwodwi yo.</p>
         </div>
-        <button onClick={exportCSV} disabled={loading}
-          className="px-4 py-2 bg-gray-900 text-white rounded-lg text-sm font-medium hover:bg-black disabled:opacity-50">
-          ⬇️ Ekspòte CSV
+        <button onClick={exportExcel} disabled={loading || exporting}
+          className="px-4 py-2 bg-green-700 text-white rounded-lg text-sm font-medium hover:bg-green-800 disabled:opacity-50">
+          {exporting ? 'Ap prepare...' : 'Ekspòte Excel'}
         </button>
       </div>
 
