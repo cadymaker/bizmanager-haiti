@@ -10,9 +10,11 @@ const PLANS = [
 
 const MONCASH_NUMBER = '+509 3193-8499';
 
+type PayMethod = 'moncash_auto' | 'moncash' | 'cash';
+
 export default function SubscribePage() {
   const [selectedPlan, setSelectedPlan] = useState(PLANS[0]);
-  const [method, setMethod] = useState<'moncash' | 'cash'>('moncash');
+  const [method, setMethod] = useState<PayMethod>('moncash_auto');
   const [receipt, setReceipt] = useState<File | null>(null);
   const [receiptPreview, setReceiptPreview] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,6 +32,7 @@ export default function SubscribePage() {
       .select('plan, status, created_at')
       .eq('business_id', session.user.id)
       .eq('status', 'pending')
+      .eq('provider', 'manual') // sèlman demann manyèl ki bezwen verifikasyon
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -44,7 +47,43 @@ export default function SubscribePage() {
     }
   }
 
+  // ── MonCash otomatik : rele API a epi redije sou MonCash ──
+  async function handleAutoPayment() {
+    setLoading(true);
+    setMsg(null);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setLoading(false); return; }
+
+    try {
+      const res = await fetch('/api/billing/create-payment', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ plan: selectedPlan.id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.redirectUrl) {
+        setMsg({ type: 'error', text: data.error || 'Erè pandan kreyasyon peman an. Tanpri eseye ankò.' });
+        setLoading(false);
+        return;
+      }
+      // Redije sou MonCash (paj la ap kite, pa bezwen setLoading(false))
+      window.location.href = data.redirectUrl;
+    } catch {
+      setMsg({ type: 'error', text: 'Erè rezo. Tanpri eseye ankò.' });
+      setLoading(false);
+    }
+  }
+
   async function handleSubmit() {
+    if (method === 'moncash_auto') {
+      return handleAutoPayment();
+    }
+
+    // ── Flux manyèl (MonCash ak resi, oswa Cash) ──
     if (method === 'moncash' && !receipt) {
       setMsg({ type: 'error', text: 'Tanpri upload foto konfirmasyon peman an.' });
       return;
@@ -74,6 +113,7 @@ export default function SubscribePage() {
       amount: selectedPlan.amount,
       duration: selectedPlan.duration,
       payment_method: method,
+      provider: 'manual',
       receipt_url: receiptUrl || null,
       status: 'pending',
     });
@@ -90,6 +130,12 @@ export default function SubscribePage() {
   }
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-HT').format(n) + ' HTG';
+
+  const methods: { id: PayMethod; label: string; sub: string }[] = [
+    { id: 'moncash_auto', label: 'MonCash otomatik', sub: 'Aktivasyon rapid' },
+    { id: 'moncash', label: 'MonCash manyèl', sub: 'Voye resi' },
+    { id: 'cash', label: 'Cash', sub: 'An pèsòn' },
+  ];
 
   return (
     <div className="p-6 max-w-2xl mx-auto space-y-6">
@@ -127,17 +173,25 @@ export default function SubscribePage() {
 
       <div>
         <label className="text-sm font-medium text-gray-700 mb-2 block">2. Metòd peman</label>
-        <div className="grid grid-cols-2 gap-3">
-          <button onClick={() => setMethod('moncash')}
-            className={`p-3 rounded-xl border text-center ${method === 'moncash' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'}`}>
-            MonCash
-          </button>
-          <button onClick={() => setMethod('cash')}
-            className={`p-3 rounded-xl border text-center ${method === 'cash' ? 'border-blue-600 bg-blue-50' : 'border-gray-200'}`}>
-            Cash (an pèsòn)
-          </button>
+        <div className="grid grid-cols-3 gap-3">
+          {methods.map(m => (
+            <button key={m.id} onClick={() => setMethod(m.id)}
+              className={`p-3 rounded-xl border text-center transition-colors ${
+                method === m.id ? 'border-blue-600 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
+              }`}>
+              <div className="font-medium text-gray-900 text-sm">{m.label}</div>
+              <div className="text-xs text-gray-500 mt-0.5">{m.sub}</div>
+            </button>
+          ))}
         </div>
       </div>
+
+      {method === 'moncash_auto' && (
+        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 text-sm text-gray-700">
+          <p>W ap redije sou MonCash pou peye <strong>{fmt(selectedPlan.amount)}</strong>.</p>
+          <p className="mt-1 text-gray-600">Lisans ou ap aktive <strong>otomatikman</strong> touswit apre peman an — pa gen resi pou upload.</p>
+        </div>
+      )}
 
       {method === 'moncash' && (
         <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -177,7 +231,11 @@ export default function SubscribePage() {
 
       <button onClick={handleSubmit} disabled={loading}
         className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50">
-        {loading ? 'Ap soumèt...' : 'Soumèt demann peman'}
+        {loading
+          ? 'Ap trete...'
+          : method === 'moncash_auto'
+            ? `Peye ${fmt(selectedPlan.amount)} ak MonCash`
+            : 'Soumèt demann peman'}
       </button>
     </div>
   );

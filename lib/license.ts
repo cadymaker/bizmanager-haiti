@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 const LICENSE_SECRET = process.env.LICENSE_SECRET_KEY!;
 export const TRIAL_DAYS = 14;
@@ -80,5 +81,25 @@ export function calcExpiryDate(duration: LicenseDuration): Date {
   if (duration === '30days') expiry.setDate(expiry.getDate() + 30);
   else if (duration === '90days') expiry.setDate(expiry.getDate() + 90);
   else expiry.setFullYear(expiry.getFullYear() + 1);
+  return expiry;
+}
+
+// ── Ajoute pou flux Bazik la ──
+// Aktivasyon dirèk nan baz done a (menm konpòtman ak apwobasyon admin).
+// Itilize pa webhook Bazik la. Li sèvi ak calcExpiryDate ki anwo a (sèl sous verite).
+export async function activateLicense(
+  supabaseAdmin: SupabaseClient,
+  businessId: string,
+  duration: LicenseDuration
+): Promise<Date> {
+  const expiry = calcExpiryDate(duration);
+  const { error } = await supabaseAdmin
+    .from('businesses')
+    .update({
+      license_status: 'active',
+      license_expiry_date: expiry.toISOString(),
+    })
+    .eq('id', businessId);
+  if (error) throw new Error('Echèk aktivasyon lisans: ' + error.message);
   return expiry;
 }
