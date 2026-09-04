@@ -10,29 +10,33 @@ export default function SubscribeSuccessPage() {
   useEffect(() => {
     let cancelled = false;
     let attempts = 0;
+    const ref = new URLSearchParams(window.location.search).get('ref');
 
     async function check() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { router.push('/login'); return; }
 
-      const { data } = await supabase
-        .from('businesses')
-        .select('license_status, license_expiry_date')
-        .eq('id', session.user.id)
-        .single();
-
-      const active =
-        data?.license_status === 'active' &&
-        !!data?.license_expiry_date &&
-        new Date(data.license_expiry_date) > new Date();
-
-      if (cancelled) return;
-      if (active) { setState('active'); return; }
+      try {
+        const res = await fetch('/api/billing/verify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
+          body: JSON.stringify({ ref }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (data.active) { setState('active'); return; }
+      } catch {
+        // inyore — n ap reeseye
+      }
 
       attempts += 1;
-      if (attempts >= 7) { setState('pending'); return; }
-      setTimeout(check, 3000); // webhook la ka pran kèk segond
+      if (cancelled) return;
+      if (attempts >= 8) { setState('pending'); return; }
+      setTimeout(check, 3000);
     }
 
     check();
