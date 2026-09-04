@@ -60,7 +60,7 @@ export async function sendLicenseConfirmationEmail(params: {
       </tr>
       <tr>
         <td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
-          BizManager Haiti · Cadymaker Services
+          BizManager Haiti 
         </td>
       </tr>
     </table>
