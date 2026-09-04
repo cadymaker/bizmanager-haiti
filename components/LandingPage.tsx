@@ -323,7 +323,7 @@ export default function LandingPage() {
               </div>
 
               <p className="text-sm text-gray-500 mt-4">
-                Pa gen kat kredi bezwen · Konfigirasyon an 2 minit
+                Pa gen bezwen kat kredi · Konfigirasyon an 2 minit
               </p>
 
               <div className="flex flex-wrap gap-x-6 gap-y-2 mt-6 text-sm text-gray-500">
