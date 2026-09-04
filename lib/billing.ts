@@ -1,10 +1,12 @@
 // lib/billing.ts
-// Lojik pataje: re-verifye ak Bazik, tcheke montan, aktive lisans, make demann.
-// Idanpotan. Itilize pa webhook la AK endpoint verify la (yon sèl sous verite).
+// Lojik pataje: re-verifye ak Bazik, tcheke montan, aktive lisans, voye imèl, make demann.
+// Idanpotan + pwoteje kont doub tretman (webhook + verify an menm tan).
+// Itilize pa webhook la AK endpoint verify la (yon sèl sous verite).
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { verifyOrder } from '@/lib/bazik';
 import { getPlan, type PlanId } from '@/lib/plans';
 import { activateLicense } from '@/lib/license';
+import { sendLicenseConfirmationEmail } from '@/lib/email';
 
 export interface PaymentRow {
   id: string;
@@ -47,16 +49,44 @@ export async function fulfillOrderIfPaid(
     return { ok: false, status: 400, reason: 'amount mismatch' };
   }
 
-  // Aktive (menm bagay ak apwobasyon admin) + make demann lan
-  await activateLicense(supabaseAdmin, row.business_id, plan.id as PlanId);
-  await supabaseAdmin
+  // Aktive lisans lan (idanpotan — mete menm valè yo)
+  const expiry = await activateLicense(supabaseAdmin, row.business_id, plan.id as PlanId);
+
+  // Klèm atomik: sèlman youn (webhook OSWA verify) reyisi pase pending → approved.
+  // Sa anpeche doub imèl si tou de rive an menm tan.
+  const { data: claimed } = await supabaseAdmin
     .from('payment_requests')
     .update({
       status: 'approved',
       paid_at: new Date().toISOString(),
       ...(eventId ? { bazik_event_id: eventId } : {}),
     })
-    .eq('id', row.id);
+    .eq('id', row.id)
+    .eq('status', 'pending')
+    .select('id');
+
+  const didClaim = Array.isArray(claimed) && claimed.length > 0;
+  if (!didClaim) {
+    // Yon lòt pwosesis deja fini l — lisans lan aktive kanmenm
+    return { ok: true, activated: false, reason: 'already processed (race)' };
+  }
+
+  // Voye imèl konfimasyon — PA janm bloke aktivasyon an si imèl la echwe
+  try {
+    const { data: userData } = await supabaseAdmin.auth.admin.getUserById(row.business_id);
+    const to = userData?.user?.email;
+    if (to) {
+      const emailRes = await sendLicenseConfirmationEmail({
+        to,
+        planLabel: plan.label,
+        amount: plan.amount,
+        expiryDate: expiry,
+      });
+      if (!emailRes.sent) console.error('[billing] imèl pa pati:', emailRes.error);
+    }
+  } catch (e) {
+    console.error('[billing] erè imèl:', e);
+  }
 
   return { ok: true, activated: true, reason: 'activated' };
 }
