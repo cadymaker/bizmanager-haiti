@@ -46,10 +46,26 @@ async function fetchToken(): Promise<CachedToken> {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new BazikError("Echèk otantifikasyon Bazik", res.status, data);
 
+  // Ekstraksyon defansif — non chan an ka varye
+  let accessToken = String(data.access_token ?? data.accessToken ?? data.token ?? "");
+
+  // Bazik bay "bzk_token_<JWT>" men /moncash/token atann JWT a sèl.
+  // Retire prefiks la si li prezan.
+  if (accessToken.startsWith("bzk_token_")) {
+    accessToken = accessToken.slice("bzk_token_".length);
+  }
+
+  // Dyagnostik san sekrè — Vercel → Logs → Runtime (ka retire pita)
+  console.log("[bazik] /token ok", {
+    keys: Object.keys(data),
+    tokenType: data.token_type,
+    tokenPreview: accessToken ? accessToken.slice(0, 12) + "..." : "(vid)",
+  });
+
   const expiresInMs = (Number(data.expires_in) || 3600) * 1000;
   return {
-    accessToken: data.access_token,
-    userId: data.user_id ?? BAZIK_USER_ID,
+    accessToken,
+    userId: String(data.user_id ?? data.userID ?? BAZIK_USER_ID),
     expiresAt: Date.now() + Math.min(expiresInMs, MAX_TOKEN_TTL_MS) - 60_000,
   };
 }
