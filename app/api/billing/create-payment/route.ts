@@ -5,6 +5,8 @@ import crypto from 'crypto';
 import { getPlan } from '@/lib/plans';
 import { createMonCashPayment } from '@/lib/bazik';
 
+export const runtime = 'nodejs';
+
 export async function POST(req: NextRequest) {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return NextResponse.json({ error: 'Pa otorize' }, { status: 401 });
@@ -32,7 +34,6 @@ export async function POST(req: NextRequest) {
 
   const referenceId = `BZM-${crypto.randomBytes(6).toString('hex').toUpperCase()}`;
 
-  // 1) Kreye demann lan an atant (provider = moncash_auto)
   const { data: inserted, error: insErr } = await supabaseAdmin
     .from('payment_requests')
     .insert({
@@ -52,12 +53,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Echèk kreyasyon demann: ' + (insErr?.message ?? '') }, { status: 500 });
   }
 
-  // 2) Rele Bazik pou kreye peman an
   try {
     const payment = await createMonCashPayment({
       gdes: plan.amount,
       referenceId,
-      description: `BizManager – lisans ${plan.label}`,
+      description: `BizManager - lisans ${plan.label}`,
       customerEmail: user.email ?? undefined,
       successUrl: `${appUrl}/subscribe/success?ref=${encodeURIComponent(referenceId)}`,
       errorUrl: `${appUrl}/subscribe/error`,
@@ -65,7 +65,6 @@ export async function POST(req: NextRequest) {
       metadata: { requestId: inserted.id, businessId: user.id, plan: plan.id },
     });
 
-    // 3) Sere orderId Bazik la sou liy lan
     await supabaseAdmin
       .from('payment_requests')
       .update({ bazik_order_id: payment.orderId })
@@ -73,9 +72,21 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ redirectUrl: payment.redirectUrl, orderId: payment.orderId });
   } catch (e) {
-    // Si Bazik echwe, retire liy an atant lan pou l pa rete kwoke
     await supabaseAdmin.from('payment_requests').delete().eq('id', inserted.id);
-    const message = e instanceof Error ? e.message : 'erè enkoni';
-    return NextResponse.json({ error: 'Echèk kreyasyon peman Bazik: ' + message }, { status: 502 });
+    const err = e as { message?: string; status?: number; body?: unknown };
+    // Vizib tou nan Vercel → Logs (Runtime)
+    console.error('[create-payment] Bazik error', {
+      status: err.status,
+      body: err.body,
+      message: err.message,
+    });
+    const detail =
+      err.body && typeof err.body === 'object' && Object.keys(err.body as object).length
+        ? JSON.stringify(err.body)
+        : err.message ?? 'erè enkoni';
+    return NextResponse.json(
+      { error: `Bazik (HTTP ${err.status ?? '?'}): ${detail}` },
+      { status: 502 }
+    );
   }
 }
