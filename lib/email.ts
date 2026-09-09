@@ -7,6 +7,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_EMAIL = process.env.RESEND_FROM_EMAIL ?? 'BizManager <onboarding@resend.dev>';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://www.bizmanagerhaiti.com';
 
+// ── Imèl konfimasyon peman (apre yon lisans aktive) ──
 export async function sendLicenseConfirmationEmail(params: {
   to: string;
   planLabel: string;
@@ -34,9 +35,9 @@ export async function sendLicenseConfirmationEmail(params: {
       </tr>
       <tr>
         <td style="padding:24px;">
-          <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Peman ou konfime ✓</h1>
+          <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Peman ou konfime</h1>
           <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.5;">
-            Mèsi. Lisans BizManager ou an aktive kounye a.
+            Mèsi pou peman ou. Lisans BizManager ou a aktive kounye a, epi w gen aksè konplè ak tout fonksyonalite yo.
           </p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;margin:0 0 20px;">
             <tr>
@@ -54,7 +55,7 @@ export async function sendLicenseConfirmationEmail(params: {
           </table>
           <a href="${APP_URL}/dashboard" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">Ale nan dashboard</a>
           <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">
-            Si se pa ou ki te fè peman sa a, tanpri kontakte nou touswit.
+            Tanpri kenbe imèl sa a pou dosye ou.
           </p>
         </td>
       </tr>
@@ -67,9 +68,10 @@ export async function sendLicenseConfirmationEmail(params: {
   </div>`;
 
   const text =
-    `Peman ou konfime! Lisans BizManager ou an aktive.\n\n` +
+    `Peman ou konfime. Lisans BizManager ou a aktive kounye a.\n\n` +
     `Plan: ${params.planLabel}\nMontan: ${fmtAmount}\nValab jiska: ${fmtExpiry}\n\n` +
-    `Ale nan dashboard: ${APP_URL}/dashboard`;
+    `Ale nan dashboard: ${APP_URL}/dashboard\n\n` +
+    `Tanpri kenbe imèl sa a pou dosye ou.`;
 
   try {
     const { error } = await resend.emails.send({
@@ -102,12 +104,12 @@ export async function sendExpiryReminderEmail(params: {
   const isTrial = params.kind === 'trial';
   const deadline = params.daysLeft <= 1 ? 'demen' : `nan ${params.daysLeft} jou`;
 
-  const heading = isTrial ? 'Tès gratis ou ap fini' : 'Abònman ou ap fini';
+  const heading = isTrial ? 'Peryòd esè ou ap fini' : 'Abònman ou ap fini';
   const intro = isTrial
-    ? `Tès gratis BizManager ou an ap fini ${deadline}. Pa kite kès ou an poze — aktive abònman w kounye a ak MonCash.`
-    : `Abònman BizManager ou an ap fini ${deadline}. Renouvle kounye a ak MonCash pou w pa pèdi aksè.`;
+    ? `Peryòd esè gratis BizManager ou a ap fini ${deadline}. Pou w kontinye jere biznis ou san entèripsyon, aktive abònman w kounye a ak MonCash.`
+    : `Abònman BizManager ou a ap fini ${deadline}. Renouvle kounye a ak MonCash pou w kenbe aksè konplè san entèripsyon.`;
   const subject = isTrial
-    ? `Tès ou ap fini ${deadline} — aktive BizManager`
+    ? `Peryòd esè ou ap fini ${deadline} — aktive BizManager`
     : `Abònman ou ap fini ${deadline} — renouvle BizManager`;
   const ctaText = isTrial ? 'Aktive abònman m' : 'Renouvle abònman m';
   const url = `${APP_URL}/subscribe`;
@@ -122,7 +124,7 @@ export async function sendExpiryReminderEmail(params: {
         <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">${heading}</h1>
         <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.5;">${intro}</p>
         <a href="${url}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">${ctaText}</a>
-        <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">Si w deja peye, inyore mesaj sa a.</p>
+        <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">Si w deja peye, ou ka inyore mesaj sa a.</p>
       </td></tr>
       <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
         BizManager Haiti
@@ -130,10 +132,68 @@ export async function sendExpiryReminderEmail(params: {
     </table>
   </div>`;
 
-  const text = `${heading}. ${intro}\n\n${ctaText}: ${url}`;
+  const text = `${heading}. ${intro}\n\n${ctaText}: ${url}\n\nSi w deja peye, ou ka inyore mesaj sa a.`;
 
   try {
     const { error } = await resend.emails.send({ from: FROM_EMAIL, to: params.to, subject, html, text });
+    if (error) {
+      const message = (error as { message?: string }).message ?? JSON.stringify(error);
+      return { sent: false, error: message };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
+  }
+}
+
+// ── Imèl byenveni (apre yon kont kreye) ──
+export async function sendWelcomeEmail(params: {
+  to: string;
+  businessName: string;
+  ownerName?: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { sent: false, error: 'RESEND_API_KEY manke' };
+  if (!params.to) return { sent: false, error: 'pa gen adrès imèl' };
+
+  const resend = new Resend(RESEND_API_KEY);
+  const greeting = params.ownerName ? `Bonjou ${params.ownerName}` : 'Bonjou';
+  const url = `${APP_URL}/login`;
+
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f4f7;padding:24px;margin:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#2563eb;padding:20px 24px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:bold;">BizManager Haiti</span>
+      </td></tr>
+      <tr><td style="padding:24px;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Byenveni sou BizManager</h1>
+        <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.5;">
+          ${greeting}, nou kontan akeyi <strong>${params.businessName}</strong> sou BizManager. Kont ou aktive, epi peryòd esè gratis <strong>14 jou</strong> ou a kòmanse jodi a. Ou ka kòmanse jere vant, envantè, faktirasyon, kliyan, ak rapò ou yo depi kounye a.
+        </p>
+        <a href="${url}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">Konekte nan kont ou</a>
+        <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">
+          Mèsi paske ou chwazi BizManager pou jere biznis ou.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
+        BizManager Haiti
+      </td></tr>
+    </table>
+  </div>`;
+
+  const text =
+    `${greeting}, nou kontan akeyi ${params.businessName} sou BizManager.\n` +
+    `Kont ou aktive, epi peryòd esè gratis 14 jou ou a kòmanse jodi a.\n\n` +
+    `Konekte: ${url}\n\nMèsi paske ou chwazi BizManager pou jere biznis ou.`;
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: 'Byenveni sou BizManager',
+      html,
+      text,
+    });
     if (error) {
       const message = (error as { message?: string }).message ?? JSON.stringify(error);
       return { sent: false, error: message };

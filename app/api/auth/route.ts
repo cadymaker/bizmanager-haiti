@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
+import { sendWelcomeEmail } from '@/lib/email';
+
+export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
   const { email, password, business_name, owner_name, phone, niche } = await req.json();
@@ -18,9 +21,6 @@ export async function POST(req: NextRequest) {
   );
 
   // 1) Kreye kont Auth la ak metòd ADMIN.
-  //    Diferans ak signUp: sa a PA konekte nouvo itilizatè a, kidonk kliyan an
-  //    rete service role pou tout rès operasyon yo (enpòtan pou business_users).
-  //    email_confirm: true → itilizatè a ka konekte san konfime imèl (jan signUp te ye a).
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({
     email,
     password,
@@ -57,6 +57,18 @@ export async function POST(req: NextRequest) {
 
   if (buError) {
     return NextResponse.json({ error: 'Kont kreye men gen yon pwoblèm ak wòl la: ' + buError.message }, { status: 500 });
+  }
+
+  // 4) Voye imèl byenveni — PA bloke enskripsyon an si li echwe
+  try {
+    const emailRes = await sendWelcomeEmail({
+      to: email,
+      businessName: business_name,
+      ownerName: owner_name,
+    });
+    if (!emailRes.sent) console.error('[auth] imèl byenveni pa pati:', emailRes.error);
+  } catch (e) {
+    console.error('[auth] erè imèl byenveni:', e);
   }
 
   return NextResponse.json({ success: true, message: 'Kont kreye! Esè gratis 14 jou kòmanse jodi a.' });

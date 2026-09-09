@@ -10,6 +10,7 @@ export default function RegisterPage() {
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,11 +23,29 @@ export default function RegisterPage() {
     });
     const data = await res.json();
     if (res.ok) {
-      router.push('/login');
+      setSuccess(true);
     } else {
       setError(data.error || 'Erè pandan enskripsyon.');
     }
     setLoading(false);
+  }
+
+  if (success) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="w-full max-w-md bg-white rounded-xl border border-gray-200 p-8 text-center">
+          <div className="w-14 h-14 rounded-full bg-green-100 text-green-600 flex items-center justify-center mx-auto text-3xl mb-4">✓</div>
+          <h1 className="text-xl font-semibold text-gray-900">Kont ou kreye avèk siksè!</h1>
+          <p className="text-sm text-gray-500 mt-2">
+            Byenveni sou BizManager{form.business_name ? `, ${form.business_name}` : ''}. Esè gratis 14 jou ou an kòmanse deja.
+          </p>
+          <button onClick={() => router.push('/login')}
+            className="w-full mt-6 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
+            Konekte kounye a
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -93,4 +112,4 @@ export default function RegisterPage() {
       </div>
     </div>
   );
-}  
+}
