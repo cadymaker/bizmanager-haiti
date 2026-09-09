@@ -60,7 +60,7 @@ export async function sendLicenseConfirmationEmail(params: {
       </tr>
       <tr>
         <td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
-          BizManager Haiti 
+          BizManager Haiti · Cadymaker Services
         </td>
       </tr>
     </table>
@@ -79,6 +79,61 @@ export async function sendLicenseConfirmationEmail(params: {
       html,
       text,
     });
+    if (error) {
+      const message = (error as { message?: string }).message ?? JSON.stringify(error);
+      return { sent: false, error: message };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
+  }
+}
+
+// ── Imèl rapèl ekspirasyon (tès OSWA abònman) ──
+export async function sendExpiryReminderEmail(params: {
+  to: string;
+  kind: 'trial' | 'plan';
+  daysLeft: number;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { sent: false, error: 'RESEND_API_KEY manke' };
+  if (!params.to) return { sent: false, error: 'pa gen adrès imèl' };
+
+  const resend = new Resend(RESEND_API_KEY);
+  const isTrial = params.kind === 'trial';
+  const deadline = params.daysLeft <= 1 ? 'demen' : `nan ${params.daysLeft} jou`;
+
+  const heading = isTrial ? 'Tès gratis ou ap fini' : 'Abònman ou ap fini';
+  const intro = isTrial
+    ? `Tès gratis BizManager ou an ap fini ${deadline}. Pa kite kès ou an poze — aktive abònman w kounye a ak MonCash.`
+    : `Abònman BizManager ou an ap fini ${deadline}. Renouvle kounye a ak MonCash pou w pa pèdi aksè.`;
+  const subject = isTrial
+    ? `Tès ou ap fini ${deadline} — aktive BizManager`
+    : `Abònman ou ap fini ${deadline} — renouvle BizManager`;
+  const ctaText = isTrial ? 'Aktive abònman m' : 'Renouvle abònman m';
+  const url = `${APP_URL}/subscribe`;
+
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f4f7;padding:24px;margin:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#2563eb;padding:20px 24px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:bold;">BizManager Haiti</span>
+      </td></tr>
+      <tr><td style="padding:24px;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">${heading}</h1>
+        <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.5;">${intro}</p>
+        <a href="${url}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:12px 20px;border-radius:8px;font-size:14px;font-weight:bold;">${ctaText}</a>
+        <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">Si w deja peye, inyore mesaj sa a.</p>
+      </td></tr>
+      <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
+        BizManager Haiti · Cadymaker Services
+      </td></tr>
+    </table>
+  </div>`;
+
+  const text = `${heading}. ${intro}\n\n${ctaText}: ${url}`;
+
+  try {
+    const { error } = await resend.emails.send({ from: FROM_EMAIL, to: params.to, subject, html, text });
     if (error) {
       const message = (error as { message?: string }).message ?? JSON.stringify(error);
       return { sent: false, error: message };

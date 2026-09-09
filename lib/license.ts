@@ -87,6 +87,7 @@ export function calcExpiryDate(duration: LicenseDuration): Date {
 // ── Ajoute pou flux Bazik la ──
 // Aktivasyon dirèk nan baz done a (menm konpòtman ak apwobasyon admin).
 // Itilize pa webhook Bazik la. Li sèvi ak calcExpiryDate ki anwo a (sèl sous verite).
+// Li remete expiry_reminder_sent a false pou rapèl ekspirasyon an re-ame pou nouvo peryòd la.
 export async function activateLicense(
   supabaseAdmin: SupabaseClient,
   businessId: string,
@@ -98,6 +99,7 @@ export async function activateLicense(
     .update({
       license_status: 'active',
       license_expiry_date: expiry.toISOString(),
+      expiry_reminder_sent: false,
     })
     .eq('id', businessId);
   if (error) throw new Error('Echèk aktivasyon lisans: ' + error.message);
