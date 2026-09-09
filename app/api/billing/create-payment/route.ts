@@ -71,21 +71,18 @@ export async function POST(req: NextRequest) {
       .eq('id', inserted.id);
 
     return NextResponse.json({ redirectUrl: payment.redirectUrl, orderId: payment.orderId });
-  } catch (e) {
+    } catch (e) {
     await supabaseAdmin.from('payment_requests').delete().eq('id', inserted.id);
     const err = e as { message?: string; status?: number; body?: unknown };
-    // Vizib tou nan Vercel → Logs (Runtime)
+    // Detay teknik yo rete nan Vercel → Logs (Runtime) pou debogaj
     console.error('[create-payment] Bazik error', {
       status: err.status,
       body: err.body,
       message: err.message,
     });
-    const detail =
-      err.body && typeof err.body === 'object' && Object.keys(err.body as object).length
-        ? JSON.stringify(err.body)
-        : err.message ?? 'erè enkoni';
+    // Mesaj jenerik pou kliyan an
     return NextResponse.json(
-      { error: `Bazik (HTTP ${err.status ?? '?'}): ${detail}` },
+      { error: 'Nou pa ka kreye peman an kounye a. Tanpri eseye ankò nan yon ti moman.' },
       { status: 502 }
     );
   }

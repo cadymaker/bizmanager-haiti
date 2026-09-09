@@ -55,14 +55,7 @@ async function fetchToken(): Promise<CachedToken> {
     accessToken = accessToken.slice("bzk_token_".length);
   }
 
-  // Dyagnostik san sekrè — Vercel → Logs → Runtime (ka retire pita)
-  console.log("[bazik] /token ok", {
-    keys: Object.keys(data),
-    tokenType: data.token_type,
-    tokenPreview: accessToken ? accessToken.slice(0, 12) + "..." : "(vid)",
-  });
-
-  const expiresInMs = (Number(data.expires_in) || 3600) * 1000;
+    const expiresInMs = (Number(data.expires_in) || 3600) * 1000;
   return {
     accessToken,
     userId: String(data.user_id ?? data.userID ?? BAZIK_USER_ID),
