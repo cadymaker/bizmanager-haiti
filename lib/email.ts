@@ -60,7 +60,7 @@ export async function sendLicenseConfirmationEmail(params: {
       </tr>
       <tr>
         <td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
-          BizManager Haiti · Cadymaker Services
+          BizManager Haiti
         </td>
       </tr>
     </table>
@@ -125,7 +125,7 @@ export async function sendExpiryReminderEmail(params: {
         <p style="margin:20px 0 0;color:#9ca3af;font-size:12px;line-height:1.5;">Si w deja peye, inyore mesaj sa a.</p>
       </td></tr>
       <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
-        BizManager Haiti · Cadymaker Services
+        BizManager Haiti
       </td></tr>
     </table>
   </div>`;
