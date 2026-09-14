@@ -9,7 +9,6 @@ export default function AccountSection() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [phoneInput, setPhoneInput] = useState('');
-  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const [savingPhone, setSavingPhone] = useState(false);
@@ -20,6 +19,10 @@ export default function AccountSection() {
   const [confirmPw, setConfirmPw] = useState('');
   const [savingPw, setSavingPw] = useState(false);
   const [pwMsg, setPwMsg] = useState<Msg>(null);
+
+  const [twoFAEnabled, setTwoFAEnabled] = useState(false);
+  const [savingTwoFA, setSavingTwoFA] = useState(false);
+  const [twoFAMsg, setTwoFAMsg] = useState<Msg>(null);
 
   useEffect(() => { load(); }, []);
 
@@ -35,11 +38,15 @@ export default function AccountSection() {
       setPhone(data?.phone ?? '');
       setPhoneInput(data?.phone ?? '');
     }
-    try {
-      const { data: factors } = await supabase.auth.mfa.listFactors();
-      const verified = (factors?.totp ?? []).some((f) => f.status === 'verified');
-      setTwoFAEnabled(verified);
-    } catch { /* inyore */ }
+
+    const token = session?.access_token;
+    if (token) {
+      try {
+        const r = await fetch('/api/account/2fa', { headers: { Authorization: `Bearer ${token}` } });
+        const j = await r.json();
+        setTwoFAEnabled(!!j.enabled);
+      } catch { /* inyore */ }
+    }
     setLoading(false);
   }
 
@@ -88,6 +95,32 @@ export default function AccountSection() {
       setPwMsg({ type: 'error', text: data.error ?? 'Erè.' });
     }
     setSavingPw(false);
+  }
+
+  async function toggle2FA() {
+    setSavingTwoFA(true);
+    setTwoFAMsg(null);
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setSavingTwoFA(false); return; }
+    const res = await fetch('/api/account/2fa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ enabled: !twoFAEnabled }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setTwoFAEnabled(data.enabled);
+      setTwoFAMsg({
+        type: 'success',
+        text: data.enabled
+          ? 'Verifikasyon 2 etap aktive. Pwochèn fwa w konekte, w ap resevwa yon kòd pa imèl.'
+          : 'Verifikasyon 2 etap dezaktive.',
+      });
+    } else {
+      setTwoFAMsg({ type: 'error', text: data.error ?? 'Erè.' });
+    }
+    setSavingTwoFA(false);
   }
 
   if (loading) return null;
@@ -145,17 +178,24 @@ export default function AccountSection() {
         </button>
       </form>
 
-      {/* Verifikasyon 2 etap (estati sèlman pou kounye a) */}
+      {/* Verifikasyon 2 etap */}
       <div className="border-t border-gray-100 pt-5">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-sm font-medium text-gray-700">Verifikasyon an 2 etap</p>
-            <p className="text-xs text-gray-400 mt-0.5">Yon kouch sekirite anplis lè w konekte.</p>
+            <p className="text-xs text-gray-400 mt-0.5">Resevwa yon kòd pa imèl chak fwa w konekte.</p>
           </div>
-          <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${twoFAEnabled ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-            {twoFAEnabled ? 'Aktif' : 'Pa aktif'}
-          </span>
+          <button onClick={toggle2FA} disabled={savingTwoFA}
+            className={`px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50 ${twoFAEnabled ? 'bg-red-50 text-red-700 border border-red-200 hover:bg-red-100' : 'bg-blue-600 text-white hover:bg-blue-700'}`}>
+            {savingTwoFA ? '...' : twoFAEnabled ? 'Dezaktive' : 'Aktive'}
+          </button>
         </div>
+        {twoFAMsg && (
+          <div className={`text-sm rounded-lg p-2 mt-3 ${twoFAMsg.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'}`}>{twoFAMsg.text}</div>
+        )}
+        <span className={`inline-flex items-center mt-2 px-2.5 py-0.5 rounded-full text-xs font-semibold ${twoFAEnabled ? 'bg-green-50 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+          {twoFAEnabled ? 'Aktif' : 'Pa aktif'}
+        </span>
       </div>
     </div>
   );

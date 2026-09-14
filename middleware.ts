@@ -1,120 +1,119 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-// Paj ki mande yon lisans valab
 const PROTECTED = [
-  '/dashboard',
-  '/pos',
-  '/inventory',
-  '/invoices',
-  '/clients',
-  '/expenses',
-  '/reports',
-  '/promotions',
-  '/cash-history',
-  '/team',
+  '/dashboard', '/pos', '/inventory', '/invoices', '/clients',
+  '/expenses', '/reports', '/promotions', '/cash-history', '/team',
 ]
 
-// Paj ki toujou pèmèt (menm si lisans ekspire)
 const ALWAYS_ALLOWED = [
-  '/subscribe',
-  '/settings',
-  '/expired',
-  '/admin',
-  '/login',
-  '/register',
-  '/legal',
-  '/choose-currency',
-  '/forgot-password',
-  '/reset-password',
+  '/subscribe', '/settings', '/expired', '/admin', '/login', '/register',
+  '/legal', '/choose-currency', '/forgot-password', '/reset-password',
 ]
 
-// Èske lisans lan valab?
+// Paj egzante de tchèk 2FA a (paj otantifikasyon + paj verifikasyon an)
+const TWO_FA_EXEMPT = [
+  '/login', '/register', '/forgot-password', '/reset-password',
+  '/verify-2fa', '/legal', '/choose-currency',
+]
+
 function isLicenseActive(biz: any): boolean {
   if (!biz) return false
   if (biz.is_admin) return true
-
   const now = Date.now()
-
   if (biz.license_status === 'active' && biz.license_expiry_date) {
     return new Date(biz.license_expiry_date).getTime() > now
   }
-
   if (biz.license_status === 'trial' && biz.trial_start_date) {
     const end = new Date(biz.trial_start_date)
     end.setDate(end.getDate() + 14)
     return end.getTime() > now
   }
-
   return false
 }
 
+// Dekode session_id nan JWT a (runtime edge → atob, pa Buffer)
+function decodeSessionId(accessToken: string | undefined): string | null {
+  if (!accessToken) return null
+  try {
+    const part = accessToken.split('.')[1]
+    const base64 = part.replace(/-/g, '+').replace(/_/g, '/')
+    const payload = JSON.parse(atob(base64))
+    return payload.session_id ?? null
+  } catch { return null }
+}
+
 export async function middleware(request: NextRequest) {
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
+  let response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          )
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          })
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          )
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+          response = NextResponse.next({ request: { headers: request.headers } })
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
         },
       },
     }
   )
 
   const { data: { user } } = await supabase.auth.getUser()
-
   const path = request.nextUrl.pathname
+  const isApi = path.startsWith('/api')
 
-  // Sote verifikasyon an sou paj piblik yo ak API yo
-  const isAlwaysAllowed = ALWAYS_ALLOWED.some(p => path.startsWith(p))
-  const isProtected = PROTECTED.some(p => path.startsWith(p))
-
-  if (!user || isAlwaysAllowed || !isProtected) {
+  // Pa gen itilizatè, oswa API → kite pase
+  if (!user || isApi) {
     return response
   }
 
-    // ===== Verifye lisans lan =====
-  // Nou sèvi ak kle sèvis la pou kontoune RLS — middleware la se sèvè,
-  // epi nou deja verifye idantite moun nan ak getUser().
+  // Kliyan admin (service role) pou kontoune RLS — middleware la se sèvè
   const admin = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      cookies: {
-        getAll() { return [] },
-        setAll() { /* pa gen cookie pou kle sèvis la */ },
-      },
-    }
+    { cookies: { getAll() { return [] }, setAll() {} } }
   )
 
   const { data: link } = await admin
     .from('business_users')
-    .select('business_id, role')
+    .select('business_id, role, two_factor_email')
     .eq('user_id', user.id)
     .maybeSingle()
 
   const businessId = link?.business_id ?? user.id
   const role = link?.role ?? 'owner'
+
+  // ===== Enfòsman 2FA (anvan lisans lan) =====
+  const isTwoFAExempt = TWO_FA_EXEMPT.some(p => path.startsWith(p))
+  if (link?.two_factor_email && !isTwoFAExempt) {
+    const { data: { session } } = await supabase.auth.getSession()
+    const sessionId = decodeSessionId(session?.access_token)
+    let verified = false
+    if (sessionId) {
+      const { data: v } = await admin
+        .from('verified_2fa_sessions')
+        .select('session_id')
+        .eq('session_id', sessionId)
+        .maybeSingle()
+      verified = !!v
+    }
+    if (!verified) {
+      const url = request.nextUrl.clone()
+      url.pathname = '/verify-2fa'
+      url.search = ''
+      return NextResponse.redirect(url)
+    }
+  }
+
+  // ===== Tchèk lisans (sèlman paj pwoteje yo) =====
+  const isProtected = PROTECTED.some(p => path.startsWith(p))
+  const isAlwaysAllowed = ALWAYS_ALLOWED.some(p => path.startsWith(p))
+  if (!isProtected || isAlwaysAllowed) {
+    return response
+  }
 
   const { data: biz } = await admin
     .from('businesses')
@@ -126,7 +125,6 @@ export async function middleware(request: NextRequest) {
     return response
   }
 
-  // Lisans ekspire — kote pou voye moun nan
   const url = request.nextUrl.clone()
   url.pathname = role === 'cashier' ? '/expired' : '/subscribe'
   url.search = ''
