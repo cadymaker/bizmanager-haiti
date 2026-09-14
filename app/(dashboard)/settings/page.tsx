@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { getLicenseInfo } from '@/lib/license';
+import AccountSection from '@/components/AccountSection';
 
 const DELETE_REASONS = [
   { value: 'too_expensive', label: 'Pri lisans lan twò chè pou mwen' },
@@ -156,7 +157,6 @@ export default function SettingsPage() {
       const serverVersion: string = data.version ?? '';
 
       if (serverVersion && serverVersion !== APP_VERSION) {
-        // Gen yon nouvo vèsyon → efase kach + dezenskri SW + rechaje
         setUpdateMsg({ type: 'info', text: `Nouvo vèsyon (v${serverVersion}) jwenn! Ap mete ajou...` });
         if (typeof window !== 'undefined' && 'caches' in window) {
           const keys = await caches.keys();
@@ -168,7 +168,6 @@ export default function SettingsPage() {
         }
         setTimeout(() => window.location.reload(), 1200);
       } else {
-        // Deja ajou
         setUpdateMsg({ type: 'success', text: `Ou deja gen dènye vèsyon an (v${APP_VERSION}).` });
         setUpdating(false);
       }
@@ -355,6 +354,9 @@ export default function SettingsPage() {
           Tarif: 30 jou — 1 000 HTG | 90 jou — 2 500 HTG | 1 an — 10 000 HTG. Peman: MonCash oswa Cash.
         </p>
       </div>
+
+      {/* KONT */}
+      <AccountSection />
 
       {/* ENPRIMANT */}
       <div className="bg-white rounded-xl border border-gray-200 p-5">

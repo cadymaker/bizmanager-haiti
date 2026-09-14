@@ -203,3 +203,98 @@ export async function sendWelcomeEmail(params: {
     return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
   }
 }
+
+// ── Imèl: modpas chanje ──
+export async function sendPasswordChangedEmail(params: {
+  to: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { sent: false, error: 'RESEND_API_KEY manke' };
+  if (!params.to) return { sent: false, error: 'pa gen adrès imèl' };
+
+  const resend = new Resend(RESEND_API_KEY);
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f4f7;padding:24px;margin:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#2563eb;padding:20px 24px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:bold;">BizManager Haiti</span>
+      </td></tr>
+      <tr><td style="padding:24px;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Modpas ou chanje</h1>
+        <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.5;">
+          Modpas kont BizManager ou a chanje avèk siksè. Si se ou ki fè chanjman sa a, ou pa bezwen fè anyen.
+        </p>
+        <p style="margin:0;color:#b91c1c;font-size:13px;line-height:1.5;">
+          Si se <strong>pa ou</strong> ki fè chanjman sa a, reyinisyalize modpas ou touswit sou paj koneksyon an pou pwoteje kont ou.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
+        BizManager Haiti
+      </td></tr>
+    </table>
+  </div>`;
+  const text =
+    `Modpas kont BizManager ou a chanje avèk siksè.\n` +
+    `Si se pa ou ki fè chanjman sa a, reyinisyalize modpas ou touswit.`;
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL, to: params.to,
+      subject: 'Modpas ou chanje — BizManager', html, text,
+    });
+    if (error) {
+      const message = (error as { message?: string }).message ?? JSON.stringify(error);
+      return { sent: false, error: message };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
+  }
+}
+
+// ── Imèl: nimewo telefòn chanje ──
+export async function sendPhoneChangedEmail(params: {
+  to: string;
+  phone: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { sent: false, error: 'RESEND_API_KEY manke' };
+  if (!params.to) return { sent: false, error: 'pa gen adrès imèl' };
+
+  const resend = new Resend(RESEND_API_KEY);
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f4f7;padding:24px;margin:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#2563eb;padding:20px 24px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:bold;">BizManager Haiti</span>
+      </td></tr>
+      <tr><td style="padding:24px;">
+        <h1 style="margin:0 0 12px;font-size:20px;color:#111827;">Nimewo telefòn chanje</h1>
+        <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.5;">
+          Nimewo telefòn ki asosye ak kont BizManager ou a chanje pou <strong>${params.phone}</strong>.
+        </p>
+        <p style="margin:0;color:#b91c1c;font-size:13px;line-height:1.5;">
+          Si se <strong>pa ou</strong> ki fè chanjman sa a, reyinisyalize modpas ou touswit pou pwoteje kont ou.
+        </p>
+      </td></tr>
+      <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
+        BizManager Haiti
+      </td></tr>
+    </table>
+  </div>`;
+  const text =
+    `Nimewo telefòn kont BizManager ou a chanje pou ${params.phone}.\n` +
+    `Si se pa ou ki fè chanjman sa a, reyinisyalize modpas ou touswit.`;
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL, to: params.to,
+      subject: 'Nimewo telefòn kont ou chanje — BizManager', html, text,
+    });
+    if (error) {
+      const message = (error as { message?: string }).message ?? JSON.stringify(error);
+      return { sent: false, error: message };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
+  }
+}
