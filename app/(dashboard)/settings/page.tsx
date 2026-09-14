@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [updateMsg, setUpdateMsg] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
 
   // Adrès
   const [street, setStreet] = useState('');
@@ -145,25 +146,36 @@ export default function SettingsPage() {
     setActivating(false);
   }
 
-  // ===== Mizajou aplikasyon (PWA cache) =====
+  // ===== Tcheke/mete ajou aplikasyon (konpare vèsyon) =====
   async function handleUpdate() {
     setUpdating(true);
+    setUpdateMsg(null);
     try {
-      // 1) Efase tout kach navigatè a (Cache Storage)
-      if (typeof window !== 'undefined' && 'caches' in window) {
-        const keys = await caches.keys();
-        await Promise.all(keys.map((k) => caches.delete(k)));
-      }
-      // 2) Dezenskri Service Worker yo pou l pa sèvi ansyen vèsyon an
-      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-        const regs = await navigator.serviceWorker.getRegistrations();
-        await Promise.all(regs.map((r) => r.unregister()));
+      const res = await fetch(`/api/version?t=${Date.now()}`, { cache: 'no-store' });
+      const data = await res.json();
+      const serverVersion: string = data.version ?? '';
+
+      if (serverVersion && serverVersion !== APP_VERSION) {
+        // Gen yon nouvo vèsyon → efase kach + dezenskri SW + rechaje
+        setUpdateMsg({ type: 'info', text: `Nouvo vèsyon (v${serverVersion}) jwenn! Ap mete ajou...` });
+        if (typeof window !== 'undefined' && 'caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+        if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+        setTimeout(() => window.location.reload(), 1200);
+      } else {
+        // Deja ajou
+        setUpdateMsg({ type: 'success', text: `Ou deja gen dènye vèsyon an (v${APP_VERSION}).` });
+        setUpdating(false);
       }
     } catch (e) {
-      console.error('[update] erè pandan netwayaj kach la:', e);
-    } finally {
-      // 3) Rechaje konplè pou rale dènye vèsyon an sou Vercel
-      window.location.reload();
+      console.error('[update] erè tcheke mizajou:', e);
+      setUpdateMsg({ type: 'error', text: 'Pa ka tcheke mizajou kounye a. Verifye koneksyon w.' });
+      setUpdating(false);
     }
   }
 
@@ -404,14 +416,23 @@ export default function SettingsPage() {
         </div>
         <div className="mt-4 pt-4 border-t border-gray-100">
           <p className="text-sm text-gray-500 mb-3">
-            Si w pa wè dènye chanjman yo, mete aplikasyon an ajou pou rale vèsyon ki pi resan an.
+            Si w pa wè dènye chanjman yo, tcheke pou mizajou pou rale vèsyon ki pi resan an.
           </p>
+          {updateMsg && (
+            <div className={`text-sm rounded-lg p-2.5 mb-3 ${
+              updateMsg.type === 'success' ? 'bg-green-50 text-green-700'
+              : updateMsg.type === 'error' ? 'bg-red-50 text-red-600'
+              : 'bg-blue-50 text-blue-700'
+            }`}>
+              {updateMsg.text}
+            </div>
+          )}
           <button onClick={handleUpdate} disabled={updating}
             className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
             {updating ? (
               <>
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                Mizajou an kou...
+                Ap tcheke...
               </>
             ) : (
               'Tcheke pou Mizajou'
