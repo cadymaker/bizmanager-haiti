@@ -15,11 +15,14 @@ const DELETE_REASONS = [
   { value: 'other', label: 'Lòt rezon' },
 ];
 
+const APP_VERSION = process.env.NEXT_PUBLIC_APP_VERSION ?? '1.0.0';
+
 export default function SettingsPage() {
   const [business, setBusiness] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [logoUploading, setLogoUploading] = useState(false);
   const [msg, setMsg] = useState('');
+  const [updating, setUpdating] = useState(false);
 
   // Adrès
   const [street, setStreet] = useState('');
@@ -140,6 +143,28 @@ export default function SettingsPage() {
       setActivateMsg('Erè: ' + (data.error ?? 'Kòd envalid'));
     }
     setActivating(false);
+  }
+
+  // ===== Mizajou aplikasyon (PWA cache) =====
+  async function handleUpdate() {
+    setUpdating(true);
+    try {
+      // 1) Efase tout kach navigatè a (Cache Storage)
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+      // 2) Dezenskri Service Worker yo pou l pa sèvi ansyen vèsyon an
+      if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+    } catch (e) {
+      console.error('[update] erè pandan netwayaj kach la:', e);
+    } finally {
+      // 3) Rechaje konplè pou rale dènye vèsyon an sou Vercel
+      window.location.reload();
+    }
   }
 
   // ===== Efase kont =====
@@ -362,6 +387,36 @@ export default function SettingsPage() {
             className="flex-1 text-center px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm hover:bg-gray-200">
             Kondisyon Itilizasyon
           </a>
+        </div>
+      </div>
+
+      {/* ENFÒMASYON SOU SISTÈM */}
+      <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 className="font-medium text-gray-800">Enfòmasyon sou Sistèm</h2>
+        <div className="flex items-center justify-between mt-3">
+          <div>
+            <p className="text-sm font-medium text-gray-700">Vèsyon aplikasyon an</p>
+            <p className="text-xs text-gray-400 mt-0.5">BizManager Haiti</p>
+          </div>
+          <span className="inline-flex items-center px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold">
+            v{APP_VERSION}
+          </span>
+        </div>
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <p className="text-sm text-gray-500 mb-3">
+            Si w pa wè dènye chanjman yo, mete aplikasyon an ajou pou rale vèsyon ki pi resan an.
+          </p>
+          <button onClick={handleUpdate} disabled={updating}
+            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+            {updating ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Mizajou an kou...
+              </>
+            ) : (
+              'Tcheke pou Mizajou'
+            )}
+          </button>
         </div>
       </div>
 
