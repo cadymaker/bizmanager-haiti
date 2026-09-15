@@ -88,6 +88,23 @@ export default function AdminDashboard() {
     setProcessing(null);
   }
 
+  async function viewReceipt(receiptUrl: string) {
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    const res = await fetch('/api/admin/receipt-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      body: JSON.stringify({ path: receiptUrl }),
+    });
+    const data = await res.json();
+    if (res.ok && data.signedUrl) {
+      window.open(data.signedUrl, '_blank', 'noopener,noreferrer');
+    } else {
+      setMsg('Erè: pa ka louvri resi a — ' + (data.error ?? ''));
+    }
+  }
+
   async function revokeLicense(businessId: string, name: string) {
     if (!confirm(`Èske ou vle revoke lisans ${name}? App la ap bloke pou li jiskaske li peye ankò.`)) return;
     setProcessing(businessId);
@@ -255,9 +272,11 @@ export default function AdminDashboard() {
                   <div className="text-xs text-gray-400 mt-1">{new Date(r.created_at).toLocaleString('fr-HT')}</div>
                 </div>
                 {r.receipt_url && (
-                  <a href={r.receipt_url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
-                    <img src={r.receipt_url} alt="Resi" className="w-20 h-20 object-cover rounded-lg border border-gray-200 hover:opacity-80" />
-                  </a>
+                  <button onClick={() => viewReceipt(r.receipt_url!)}
+                    className="flex-shrink-0 w-20 h-20 rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-1 hover:bg-gray-100 text-gray-500">
+                    <span className="text-xl">🧾</span>
+                    <span className="text-[10px] font-medium">Wè resi</span>
+                  </button>
                 )}
                 <div className="flex sm:flex-col gap-2 w-full sm:w-auto">
                   <button onClick={() => handleRequest(r.id, 'approve')} disabled={processing === r.id}
