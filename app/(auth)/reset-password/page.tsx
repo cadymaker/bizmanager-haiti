@@ -10,22 +10,31 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
 
-  // Verifye si gen yon sesyon reset valid (soti nan lyen imèl la)
+  // Detekte sesyon rekiperasyon an (soti nan lyen imèl la), san depann de yon tan fiks
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setReady(true);
-      } else {
-        // Tann yon ti moman pou Supabase trete token nan URL la
-        setTimeout(() => {
-          supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) setReady(true);
-            else setError('Lyen an envalid oswa li ekspire. Tanpri mande yon nouvo lyen.');
-          });
-        }, 1500);
+    let resolved = false;
+
+    const markReady = () => { resolved = true; setReady(true); };
+
+    // 1) Ekoute evènman otantifikasyon yo (PASSWORD_RECOVERY deklanche lè lyen an trete)
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session && (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+        markReady();
       }
     });
+
+    // 2) Tchek inisyal (si sesyon an deja etabli anvan listener a tache)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) markReady();
+    });
+
+    // 3) Apre 5 segonn, si toujou pa gen sesyon → lyen envalid/ekspire
+    const timer = setTimeout(() => {
+      if (!resolved) setError('Lyen an envalid oswa li ekspire. Tanpri mande yon nouvo lyen.');
+    }, 5000);
+
+    return () => { sub.subscription.unsubscribe(); clearTimeout(timer); };
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -53,7 +62,6 @@ export default function ResetPasswordPage() {
 
     setDone(true);
     setLoading(false);
-    // Redirije nan koneksyon apre 2 segonn
     setTimeout(() => { window.location.href = '/login'; }, 2500);
   }
 
