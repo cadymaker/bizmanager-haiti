@@ -26,6 +26,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [processing, setProcessing] = useState<string | null>(null);
+  const [twoFAIds, setTwoFAIds] = useState<Set<string>>(new Set());
 
   // Efase biznis
   const [deleteTarget, setDeleteTarget] = useState<Business | null>(null);
@@ -55,6 +56,17 @@ export default function AdminDashboard() {
       .eq('status', 'pending')
       .order('created_at', { ascending: false });
     setRequests((reqs as any) ?? []);
+
+    // Ki biznis ki gen 2FA aktif (via service role)
+    try {
+      const res2fa = await fetch('/api/admin/disable-2fa', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res2fa.ok) {
+        const j = await res2fa.json();
+        setTwoFAIds(new Set<string>(j.enabledBusinessIds ?? []));
+      }
+    } catch { /* inyore */ }
 
     setLoading(false);
   }
@@ -91,6 +103,24 @@ export default function AdminDashboard() {
     const data = await res.json();
     if (res.ok) { setMsg(data.message); load(); }
     else { setMsg('Erè: ' + (data.error ?? 'pa ka revoke')); }
+    setProcessing(null);
+  }
+
+  async function disable2FA(businessId: string, name: string) {
+    if (!confirm(`Dezaktive verifikasyon 2 etap pou ${name}? Y ap ka konekte san kòd imèl la.`)) return;
+    setProcessing(businessId);
+    setMsg('');
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) { setProcessing(null); return; }
+    const res = await fetch('/api/admin/disable-2fa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      body: JSON.stringify({ businessId }),
+    });
+    const data = await res.json();
+    if (res.ok) { setMsg('Verifikasyon 2 etap dezaktive pou ' + name + '.'); load(); }
+    else { setMsg('Erè: ' + (data.error ?? 'pa ka dezaktive')); }
     setProcessing(null);
   }
 
@@ -269,17 +299,22 @@ export default function AdminDashboard() {
                 <td className="px-4 py-3 text-gray-500">{b.email}</td>
                 <td className="px-4 py-3 capitalize text-gray-700">{b.niche}</td>
                 <td className="px-4 py-3">
-                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                    b.license_status === 'active' ? 'bg-green-100 text-green-700' :
-                    b.license_status === 'trial' ? 'bg-amber-100 text-amber-700' :
-                    'bg-red-100 text-red-700'
-                  }`}>
-                    {b.license_status === 'trial' ? `Esè — ${daysLeft(b.trial_start_date)}j` :
-                     b.license_status === 'active' ? 'Aktif' : 'Ekspire'}
-                  </span>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                      b.license_status === 'active' ? 'bg-green-100 text-green-700' :
+                      b.license_status === 'trial' ? 'bg-amber-100 text-amber-700' :
+                      'bg-red-100 text-red-700'
+                    }`}>
+                      {b.license_status === 'trial' ? `Esè — ${daysLeft(b.trial_start_date)}j` :
+                       b.license_status === 'active' ? 'Aktif' : 'Ekspire'}
+                    </span>
+                    {twoFAIds.has(b.id) && (
+                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">🔒 2FA</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3">
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button onClick={() => { setSelected(b); setCode(null); }}
                       className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 whitespace-nowrap">
                       Jenere kòd
@@ -289,6 +324,13 @@ export default function AdminDashboard() {
                         disabled={processing === b.id}
                         className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 disabled:opacity-50">
                         {processing === b.id ? '...' : 'Revoke'}
+                      </button>
+                    )}
+                    {twoFAIds.has(b.id) && (
+                      <button onClick={() => disable2FA(b.id, b.business_name)}
+                        disabled={processing === b.id}
+                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs hover:bg-indigo-200 disabled:opacity-50 whitespace-nowrap">
+                        {processing === b.id ? '...' : 'Dezaktive 2FA'}
                       </button>
                     )}
                     {!b.is_admin && (
