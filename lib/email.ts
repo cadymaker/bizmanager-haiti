@@ -349,3 +349,118 @@ export async function sendLoginCodeEmail(params: {
     return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
   }
 }
+
+function escapeHtml(s: string): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Imèl: resi vant POS ──
+export async function sendReceiptEmail(params: {
+  to: string;
+  businessName: string;
+  addressLines: string[];
+  invoiceNumber: string;
+  dateTime: string;
+  cashierName: string;
+  items: { name: string; qty: number; unitPrice: string; total: string }[];
+  subtotal: string;
+  discountAmount: string | null;
+  promoCode: string | null;
+  total: string;
+  cashGiven: string;
+  change: string;
+}): Promise<{ sent: boolean; error?: string }> {
+  if (!RESEND_API_KEY) return { sent: false, error: 'RESEND_API_KEY manke' };
+  if (!params.to) return { sent: false, error: 'pa gen adrès imèl' };
+
+  const resend = new Resend(RESEND_API_KEY);
+
+  const itemsHtml = params.items.map(it => `
+    <tr>
+      <td style="padding:6px 0;border-bottom:1px solid #f0f0f3;color:#111827;font-size:13px;">
+        ${escapeHtml(it.name)}<br>
+        <span style="color:#6b7280;font-size:12px;">${it.qty} × ${escapeHtml(it.unitPrice)}</span>
+      </td>
+      <td style="padding:6px 0;border-bottom:1px solid #f0f0f3;text-align:right;color:#111827;font-size:13px;white-space:nowrap;">
+        ${escapeHtml(it.total)}
+      </td>
+    </tr>`).join('');
+
+  const discountRow = params.discountAmount
+    ? `<tr><td style="padding:4px 0;color:#059669;font-size:13px;">Rabè${params.promoCode ? ` (${escapeHtml(params.promoCode)})` : ''}</td>
+         <td style="padding:4px 0;text-align:right;color:#059669;font-size:13px;">- ${escapeHtml(params.discountAmount)}</td></tr>`
+    : '';
+
+  const subtotalRow = params.discountAmount
+    ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">Soutotal</td>
+         <td style="padding:4px 0;text-align:right;color:#6b7280;font-size:13px;">${escapeHtml(params.subtotal)}</td></tr>`
+    : '';
+
+  const addr = params.addressLines.map(l => `<div style="color:#6b7280;font-size:12px;">${escapeHtml(l)}</div>`).join('');
+
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;background:#f4f4f7;padding:24px;margin:0;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;">
+      <tr><td style="background:#2563eb;padding:20px 24px;">
+        <span style="color:#ffffff;font-size:18px;font-weight:bold;">${escapeHtml(params.businessName)}</span>
+      </td></tr>
+      <tr><td style="padding:24px;">
+        <div style="margin-bottom:14px;">${addr}</div>
+        <h1 style="margin:0 0 4px;font-size:18px;color:#111827;">Resi acha</h1>
+        <div style="color:#6b7280;font-size:12px;margin-bottom:14px;">
+          No: ${escapeHtml(params.invoiceNumber)} · ${escapeHtml(params.dateTime)}<br>
+          Kesye: ${escapeHtml(params.cashierName)}
+        </div>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+          ${itemsHtml}
+          ${subtotalRow}
+          ${discountRow}
+          <tr>
+            <td style="padding:10px 0 4px;color:#111827;font-size:16px;font-weight:bold;">Total</td>
+            <td style="padding:10px 0 4px;text-align:right;color:#111827;font-size:16px;font-weight:bold;">${escapeHtml(params.total)}</td>
+          </tr>
+          <tr><td style="padding:2px 0;color:#6b7280;font-size:12px;">Kòb bay</td>
+              <td style="padding:2px 0;text-align:right;color:#6b7280;font-size:12px;">${escapeHtml(params.cashGiven)}</td></tr>
+          <tr><td style="padding:2px 0;color:#6b7280;font-size:12px;">Monè</td>
+              <td style="padding:2px 0;text-align:right;color:#6b7280;font-size:12px;">${escapeHtml(params.change)}</td></tr>
+        </table>
+        <p style="margin:18px 0 0;color:#9ca3af;font-size:12px;text-align:center;">Mèsi pou konfyans ou! Nou espere wè w ankò.</p>
+      </td></tr>
+      <tr><td style="padding:16px 24px;background:#f9fafb;color:#9ca3af;font-size:11px;text-align:center;">
+        ${escapeHtml(params.businessName)} · via BizManager
+      </td></tr>
+    </table>
+  </div>`;
+
+  const textLines = [
+    params.businessName, ...params.addressLines, '',
+    `Resi No: ${params.invoiceNumber}`, `Dat: ${params.dateTime}`, `Kesye: ${params.cashierName}`, '',
+    ...params.items.map(it => `${it.name}  ${it.qty} x ${it.unitPrice} = ${it.total}`),
+    '',
+    params.discountAmount ? `Soutotal: ${params.subtotal}` : '',
+    params.discountAmount ? `Rabè: - ${params.discountAmount}` : '',
+    `TOTAL: ${params.total}`,
+    `Kòb bay: ${params.cashGiven}`,
+    `Monè: ${params.change}`, '',
+    'Mèsi pou konfyans ou!',
+  ].filter(Boolean);
+
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM_EMAIL,
+      to: params.to,
+      subject: `Resi acha ou — ${params.businessName}`,
+      html,
+      text: textLines.join('\n'),
+    });
+    if (error) {
+      const message = (error as { message?: string }).message ?? JSON.stringify(error);
+      return { sent: false, error: message };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, error: e instanceof Error ? e.message : 'erè enkoni' };
+  }
+}

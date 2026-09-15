@@ -85,6 +85,22 @@ interface ZReport {
   cashierName: string;
 }
 
+// ===== Keu imèl resi (offline-safe) =====
+interface PendingEmail { local_id: string; payload: any; }
+const emailQueueKey = (bid: string) => `bzm_receipt_email_queue_${bid}`;
+function readEmailQueue(bid: string): PendingEmail[] {
+  try { return JSON.parse(localStorage.getItem(emailQueueKey(bid)) || '[]'); } catch { return []; }
+}
+function writeEmailQueue(bid: string, q: PendingEmail[]) {
+  try { localStorage.setItem(emailQueueKey(bid), JSON.stringify(q)); } catch {}
+}
+function addEmailToQueue(bid: string, item: PendingEmail) {
+  const q = readEmailQueue(bid); q.push(item); writeEmailQueue(bid, q);
+}
+function removeEmailFromQueue(bid: string, localId: string) {
+  writeEmailQueue(bid, readEmailQueue(bid).filter(e => e.local_id !== localId));
+}
+
 function todayLocalDate(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -155,6 +171,11 @@ export default function PosPage() {
 
   const [receipt, setReceipt] = useState<Receipt | null>(null);
 
+  // Imèl resi
+  const [emailInput, setEmailInput] = useState('');
+  const [emailStatus, setEmailStatus] = useState<'idle' | 'sending' | 'sent' | 'queued'>('idle');
+  const [emailMsg, setEmailMsg] = useState('');
+
   // ===== Rabè =====
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [discountMode, setDiscountMode] = useState<'none' | 'manual' | 'promo'>('none');
@@ -190,6 +211,11 @@ export default function PosPage() {
       window.removeEventListener('offline', onOffline);
     };
   }, []);
+
+  // Reset chan imèl la chak nouvo resi
+  useEffect(() => {
+    if (receipt) { setEmailInput(''); setEmailStatus('idle'); setEmailMsg(''); }
+  }, [receipt]);
 
   async function load() {
     setLoading(true);
@@ -340,6 +366,11 @@ export default function PosPage() {
       if (res.failed > 0) {
         setSyncMsg(`${res.failed} vant pa t ka voye. N ap eseye ankò.`);
       }
+    }
+
+    // Voye imèl resi ki nan keu a (si nou an liy)
+    if (!isOff) {
+      flushEmailQueue(bid);
     }
   }
 
@@ -905,6 +936,87 @@ export default function PosPage() {
 
   function closeReceipt() {
     setReceipt(null);
+  }
+
+  // ===== Imèl resi =====
+  function buildEmailPayload(to: string) {
+    const addr2 = [biz?.city, biz?.department].filter(Boolean).join(', ');
+    return {
+      to,
+      businessName: biz?.business_name ?? 'BizManager',
+      addressLines: [
+        biz?.street ?? '',
+        addr2 ? `${addr2}, Ayiti` : 'Ayiti',
+        biz?.phone ? `Tel: ${biz.phone}` : '',
+      ].filter(Boolean),
+      invoiceNumber: receipt!.invoiceNumber,
+      dateTime: receipt!.dateTime,
+      cashierName: receipt!.cashierName,
+      items: receipt!.items.map(it => ({
+        name: it.name, qty: it.quantity,
+        unitPrice: fmt(it.unit_price), total: fmt(it.total),
+      })),
+      subtotal: fmt(receipt!.subtotal),
+      discountAmount: receipt!.discountAmount > 0 ? fmt(receipt!.discountAmount) : null,
+      promoCode: receipt!.promoCode,
+      total: fmt(receipt!.total),
+      cashGiven: fmt(receipt!.cashGiven),
+      change: fmt(receipt!.change),
+    };
+  }
+
+  async function sendReceiptByEmail() {
+    if (!receipt || !businessId) return;
+    const to = emailInput.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) { setEmailMsg('Antre yon imèl valab.'); return; }
+    setEmailMsg('');
+    const payload = buildEmailPayload(to);
+
+    // Offline → mete nan keu, voye pita
+    if (offline || !isOnline()) {
+      addEmailToQueue(businessId, { local_id: makeLocalId(), payload });
+      setEmailStatus('queued');
+      return;
+    }
+
+    // An liy → eseye voye kounye a
+    setEmailStatus('sending');
+    try {
+      const supabase = createClient();
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch('/api/receipt/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session?.access_token ?? ''}` },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok) {
+        setEmailStatus('sent');
+      } else {
+        addEmailToQueue(businessId, { local_id: makeLocalId(), payload });
+        setEmailStatus('queued');
+      }
+    } catch {
+      addEmailToQueue(businessId, { local_id: makeLocalId(), payload });
+      setEmailStatus('queued');
+    }
+  }
+
+  async function flushEmailQueue(bid: string) {
+    const q = readEmailQueue(bid);
+    if (q.length === 0) return;
+    const supabase = createClient();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) return;
+    for (const item of q) {
+      try {
+        const res = await fetch('/api/receipt/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify(item.payload),
+        });
+        if (res.ok) removeEmailFromQueue(bid, item.local_id);
+      } catch { /* kite l nan keu, n ap eseye ankò pwochèn fwa */ }
+    }
   }
 
   function printReceipt() {
@@ -1726,6 +1838,35 @@ export default function PosPage() {
                 Mesi pou konfyans ou!<br />
                 Nou espere we w anko.
               </div>
+            </div>
+
+            {/* ===== VOYE PA IMÈL ===== */}
+            <div className="p-4 border-t border-gray-100 print:hidden">
+              {emailStatus === 'sent' ? (
+                <div className="text-sm rounded-lg p-2 bg-green-50 text-green-700 text-center">
+                  Resi a voye pa imèl ✓
+                </div>
+              ) : emailStatus === 'queued' ? (
+                <div className="text-sm rounded-lg p-2 bg-blue-50 text-blue-700 text-center">
+                  Resi a ap voye pa imèl otomatikman lè koneksyon tounen.
+                </div>
+              ) : (
+                <>
+                  <label className="text-xs text-gray-500 font-medium">Voye resi a pa imèl (opsyonèl)</label>
+                  <div className="flex gap-2 mt-1">
+                    <input type="email" inputMode="email"
+                      placeholder="imel.kliyan@egzanp.com"
+                      value={emailInput}
+                      onChange={e => setEmailInput(e.target.value)}
+                      className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                    <button onClick={sendReceiptByEmail} disabled={emailStatus === 'sending'}
+                      className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
+                      {emailStatus === 'sending' ? '...' : 'Voye'}
+                    </button>
+                  </div>
+                  {emailMsg && <div className="text-sm rounded-lg p-2 mt-2 bg-red-50 text-red-600">{emailMsg}</div>}
+                </>
+              )}
             </div>
 
             <div className="p-4 border-t border-gray-100 flex gap-2 print:hidden">
