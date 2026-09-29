@@ -9,7 +9,7 @@ const nav = [
   { href: '/invoices', label: 'Fakti' },
   { href: '/expenses', label: 'Depans' },
   { href: '/clients', label: 'Kliyan / Dèt' },
-  { href: '/inventory', label: 'Envantè', retailOnly: true },
+  { href: '/inventory', label: 'Envantè' },
   { href: '/promotions', label: 'Pwomosyon' },
   { href: '/cash-history', label: 'Istwa Kès' },
   { href: '/reports', label: 'Rapò & Statistik' },
@@ -30,9 +30,6 @@ export default function Sidebar({ businessName, isAdmin, niche, role, onNavigate
   }
 
   const isCashier = role === 'cashier';
-
-  // Filtre eleman ki pou retail sèlman (Envantè)
-  const visibleNav = nav.filter(item => !item.retailOnly || niche === 'retail');
 
   return (
     <aside className="w-56 bg-gray-900 text-white flex flex-col min-h-screen">
@@ -56,7 +53,7 @@ export default function Sidebar({ businessName, isAdmin, niche, role, onNavigate
         ) : (
           // ===== MENI MÈT (tout bagay, nan lòd chwazi a) =====
           <>
-            {visibleNav.map(({ href, label }) => (
+            {nav.map(({ href, label }) => (
               <Link key={href} href={href} onClick={onNavigate}
                 className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                   pathname.startsWith(href)
