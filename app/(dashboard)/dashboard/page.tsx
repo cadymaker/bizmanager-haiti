@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/client';
 import { getBusinessContext } from '@/lib/business';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { formatMoney } from '@/lib/currency';
+import OnboardingChecklist from '@/components/OnboardingChecklist';
 
 interface Metrics {
   total_sales: number;
@@ -122,6 +123,8 @@ export default function DashboardPage() {
           <a href="/subscribe" className="underline font-medium">Achte lisans →</a>
         </div>
       )}
+
+      <OnboardingChecklist />
 
       <div>
         <h1 className="text-2xl font-semibold text-gray-900">Tablo de bòd</h1>
