@@ -77,19 +77,26 @@ export default function SettingsPage() {
     const ctx = await getBusinessContext();
     if (!ctx) { setLogoUploading(false); return; }
 
-    const ext = file.name.split('.').pop();
-    const fileName = `${ctx.businessId}/logo.${ext}`;
+    const ext = (file.name.split('.').pop() || 'png').toLowerCase();
+    // Non inik chak fwa — evite pwoblèm upsert sou yon non fiks (404 NoSuchKey)
+    const fileName = `${ctx.businessId}/logo-${Date.now()}.${ext}`;
 
     const { error: upErr } = await supabase.storage
       .from('logos')
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, file, { upsert: false, contentType: file.type });
 
     if (upErr) { setMsg('Erè upload: ' + upErr.message); setLogoUploading(false); return; }
 
     const { data: urlData } = supabase.storage.from('logos').getPublicUrl(fileName);
-    const logoUrl = `${urlData.publicUrl}?t=${Date.now()}`;
+    const logoUrl = urlData.publicUrl;
 
-    await supabase.from('businesses').update({ logo_url: logoUrl }).eq('id', ctx.businessId);
+    const { error: updErr } = await supabase
+      .from('businesses')
+      .update({ logo_url: logoUrl })
+      .eq('id', ctx.businessId);
+
+    if (updErr) { setMsg('Erè: ' + updErr.message); setLogoUploading(false); return; }
+
     setMsg('Logo modifye!');
     load();
     setLogoUploading(false);
