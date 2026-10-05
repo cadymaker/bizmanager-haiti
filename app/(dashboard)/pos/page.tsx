@@ -1244,9 +1244,10 @@ export default function PosPage() {
                       : 'border-gray-200 bg-white hover:border-blue-400 hover:shadow-sm'
                   }`}
                 >
-                  <div className="w-full h-16 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center overflow-hidden mb-2">
+                  {/* Foto pwodwi: wotè ase + object-contain pou tout foto a parèt san koupe */}
+                  <div className="w-full h-28 sm:h-32 rounded-lg bg-white border border-gray-100 flex items-center justify-center overflow-hidden mb-2">
                     {p.image_url ? (
-                      <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" />
+                      <img src={p.image_url} alt={p.name} className="max-w-full max-h-full object-contain p-1" />
                     ) : (
                       <span className="text-gray-300 text-xs">Pa gen foto</span>
                     )}
