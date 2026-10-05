@@ -349,15 +349,47 @@ export default function InvoiceDetailPage() {
 
     try {
       const { jsPDF } = await import('jspdf');
-      const doc = new jsPDF({ unit: 'pt', format: 'a4' });
 
-      const pageW = doc.internal.pageSize.getWidth();
+      const pageW = 595.28; // A4 lajè an pt
       const margin = 40;
+
+      // Fòma lajan ki rann byen nan PDF (espas nòmal, pa espas-ensekab Intl la ki parèt tankou "/")
+      const pdfMoney = (n: number) => {
+        const rounded = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+        const hasDecimals = rounded % 1 !== 0;
+        const parts = rounded.toFixed(hasDecimals ? 2 : 0).split('.');
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // separatè milye = espas nòmal
+        return parts.join('.') + ' ' + sym;
+      };
+
+      const items = invoice.metadata?.items ?? [];
+
+      // ---- 1) Kalkile wotè total la DABÒ (pou paj dinamik, san espas blan) ----
+      const headerH = 90;
+      const clientH = 70;
+      const tableHeadH = 24;
+      const rowH = 22;
+      const rowsH = items.length * rowH;
+
+      const rawTotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
+      const discount = Number(
+        invoice.discount_amount && invoice.discount_amount > 0
+          ? invoice.discount_amount
+          : invoice.metadata?.discount ?? 0
+      );
+      let totalLines = 1; // Total toujou
+      if (discount > 0) totalLines += 2;         // Sou-total + Rabè
+      if (invoice.amount_paid > 0) totalLines += 2; // Peye + Balans
+      const totalsH = 28 + totalLines * 18;
+      const footerH = 60;
+
+      const contentH = margin + headerH + clientH + 12 + tableHeadH + rowsH + totalsH + footerH;
+      const pageH = Math.max(contentH, 260);
+
+      const doc = new jsPDF({ unit: 'pt', format: [pageW, pageH] });
       let y = margin;
 
-      const money = (n: number) => formatMoney(n, invoice.currency);
-
-      // Logo
+      // ---- 2) Logo ----
       if (biz?.logo_url) {
         try {
           const res = await fetch(biz.logo_url);
@@ -371,9 +403,10 @@ export default function InvoiceDetailPage() {
         } catch { /* logo opsyonèl */ }
       }
 
-      // Enfo biznis
+      // ---- Enfo biznis ----
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
+      doc.setTextColor(20);
       doc.text(biz?.business_name ?? '', margin + 75, y + 18);
 
       doc.setFontSize(9);
@@ -385,7 +418,7 @@ export default function InvoiceDetailPage() {
       if (addrLine) { doc.text(addrLine + ', Ayiti', margin + 75, by); by += 12; }
       if (biz?.phone) { doc.text(biz.phone, margin + 75, by); by += 12; }
 
-      // FAKTI
+      // ---- FAKTI ----
       doc.setTextColor(37, 99, 235);
       doc.setFontSize(22);
       doc.setFont('helvetica', 'bold');
@@ -404,7 +437,7 @@ export default function InvoiceDetailPage() {
       doc.line(margin, y, pageW - margin, y);
       y += 22;
 
-      // Kliyan
+      // ---- Kliyan ----
       doc.setFontSize(8);
       doc.setTextColor(130);
       doc.text('FAKTI POU', margin, y);
@@ -422,13 +455,13 @@ export default function InvoiceDetailPage() {
 
       y += 12;
 
-      // Antèt tab
+      // ---- Antèt tab ----
       const colQty = pageW - margin - 260;
       const colPrice = pageW - margin - 150;
       const colTotal = pageW - margin;
 
       doc.setFillColor(37, 99, 235);
-      doc.rect(margin, y, pageW - margin * 2, 24, 'F');
+      doc.rect(margin, y, pageW - margin * 2, tableHeadH, 'F');
       doc.setTextColor(255);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
@@ -436,23 +469,22 @@ export default function InvoiceDetailPage() {
       doc.text('QTE', colQty, y + 16, { align: 'right' });
       doc.text('PRI', colPrice, y + 16, { align: 'right' });
       doc.text('TOTAL', colTotal - 10, y + 16, { align: 'right' });
-      y += 24;
+      y += tableHeadH;
 
-      // Liy atik
-      doc.setTextColor(30);
+      // ---- Liy atik ----
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      const items = invoice.metadata?.items ?? [];
       items.forEach((it, i) => {
         if (i % 2 === 1) {
           doc.setFillColor(248, 250, 252);
-          doc.rect(margin, y, pageW - margin * 2, 22, 'F');
+          doc.rect(margin, y, pageW - margin * 2, rowH, 'F');
         }
+        doc.setTextColor(30);
         doc.text(String(it.name), margin + 10, y + 15);
         doc.text(String(it.quantity), colQty, y + 15, { align: 'right' });
-        doc.text(money(it.unit_price), colPrice, y + 15, { align: 'right' });
-        doc.text(money(it.quantity * it.unit_price), colTotal - 10, y + 15, { align: 'right' });
-        y += 22;
+        doc.text(pdfMoney(it.unit_price), colPrice, y + 15, { align: 'right' });
+        doc.text(pdfMoney(it.quantity * it.unit_price), colTotal - 10, y + 15, { align: 'right' });
+        y += rowH;
       });
 
       y += 10;
@@ -461,17 +493,11 @@ export default function InvoiceDetailPage() {
       doc.line(colQty - 40, y, pageW - margin, y);
       y += 18;
 
-      const rawTotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
-      const discount = Number(
-        invoice.discount_amount && invoice.discount_amount > 0
-          ? invoice.discount_amount
-          : invoice.metadata?.discount ?? 0
-      );
-
+      // ---- Totals ----
       const line = (label: string, val: string, opts?: { bold?: boolean; size?: number; color?: [number, number, number] }) => {
         doc.setFontSize(opts?.size ?? 10);
         doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
-        if (opts?.color) doc.setTextColor(...opts.color);
+        if (opts?.color) doc.setTextColor(opts.color[0], opts.color[1], opts.color[2]);
         else doc.setTextColor(60);
         doc.text(label, colPrice, y, { align: 'right' });
         doc.text(val, colTotal - 10, y, { align: 'right' });
@@ -479,27 +505,28 @@ export default function InvoiceDetailPage() {
       };
 
       if (discount > 0) {
-        line('Sou-total', money(rawTotal));
+        line('Sou-total', pdfMoney(rawTotal));
         line(
           invoice.promo_code ? `Rabè (${invoice.promo_code})` : 'Rabè',
-          '- ' + money(discount),
+          '- ' + pdfMoney(discount),
           { color: [22, 163, 74] }
         );
       }
-      line('Total', money(invoice.total_amount), { bold: true, size: 13, color: [20, 20, 20] });
+      line('Total', pdfMoney(invoice.total_amount), { bold: true, size: 13, color: [20, 20, 20] });
 
       if (invoice.amount_paid > 0) {
-        line('Peye', money(invoice.amount_paid), { color: [22, 163, 74] });
-        line('Balans', money(invoice.balance_due), {
+        line('Peye', pdfMoney(invoice.amount_paid), { color: [22, 163, 74] });
+        line('Balans', pdfMoney(invoice.balance_due), {
           bold: true,
           color: invoice.balance_due > 0 ? [234, 88, 12] : [22, 163, 74],
         });
       }
 
-      // Pye paj
-      const footY = doc.internal.pageSize.getHeight() - 50;
+      // ---- Pye paj (jis anba kontni an) ----
+      const footY = pageH - 24;
       doc.setDrawColor(230);
-      doc.line(margin, footY - 20, pageW - margin, footY - 20);
+      doc.setLineWidth(0.5);
+      doc.line(margin, footY - 16, pageW - margin, footY - 16);
       doc.setFontSize(9);
       doc.setTextColor(130);
       doc.setFont('helvetica', 'normal');
