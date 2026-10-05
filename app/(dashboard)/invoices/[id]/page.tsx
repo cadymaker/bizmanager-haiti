@@ -281,13 +281,11 @@ export default function InvoiceDetailPage() {
       const delta = (newByProduct[pid] ?? 0) - (oldByProduct[pid] ?? 0);
       if (delta === 0) continue;
       if (delta > 0) {
-        // Nou vann plis → desann stock
         await supabase.rpc('decrement_stock', {
           p_product_id: pid,
           p_quantity: delta,
         });
       } else {
-        // Nou retire atik → remonte stock
         await supabase.rpc('increment_stock', {
           p_product_id: pid,
           p_quantity: Math.abs(delta),
@@ -343,16 +341,18 @@ export default function InvoiceDetailPage() {
       : invoice?.metadata?.discount ?? 0
   );
 
-   async function downloadPDF() {
+  async function downloadPDF() {
     if (!invoice) return;
     setDownloading(true);
 
     try {
       const { jsPDF } = await import('jspdf');
 
-      const pageW = 595.28; // A4 lajè an pt
+      const pageW = 595.28; // lajè A4 an pt
       const margin = 40;
+      const rightX = pageW - margin;
 
+      // Fòma lajan pou PDF (espas nòmal — pa espas-ensekab Intl la ki parèt tankou "/")
       const pdfMoney = (n: number) => {
         const rounded = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
         const hasDecimals = rounded % 1 !== 0;
@@ -362,7 +362,6 @@ export default function InvoiceDetailPage() {
       };
 
       const items = invoice.metadata?.items ?? [];
-
       const rawTotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
       const discount = Number(
         invoice.discount_amount && invoice.discount_amount > 0
@@ -370,38 +369,41 @@ export default function InvoiceDetailPage() {
           : invoice.metadata?.discount ?? 0
       );
 
-      // Pozisyon kolòn yo (TOTAL kole nan bò dwat la, rès yo sòti agoch)
-      const rightX = pageW - margin;       // bò dwat tab la
-      const colTotal = rightX;             // TOTAL (aligne adwat)
-      const colPrice = rightX - 115;       // PRI
-      const colQty = rightX - 210;         // QTE
+      // Kolòn yo
+      const colTotal = rightX - 10;  // TOTAL (aligne adwat)
+      const colPrice = rightX - 120; // PRI
+      const colQty = rightX - 220;   // QTE
 
       const rowH = 22;
       const tableHeadH = 24;
 
-      // ---- Kalkile wotè kontni reyèl la (pou paj dinamik) ----
-      // n ap konstwi tout bagay, mezire y final la, APRE sa kreye paj la —
-      // men jsPDF mande wotè a davans. Donk n ap estime jis.
-      let totalLines = 1;                          // Total
-      if (discount > 0) totalLines += 2;           // Sou-total + Rabè
+      // ---- Kalkile wotè paj la selon kontni an ----
+      let totalLines = 1;                           // Total
+      if (discount > 0) totalLines += 2;            // Sou-total + Rabè
       if (invoice.amount_paid > 0) totalLines += 2; // Peye + Balans
 
-      // Estimasyon wotè (akòde ak kontni reyèl la)
       let estH = margin;                 // tèt
-      estH += 70;                        // blòk logo/biznis/FAKTI
-      estH += 22;                        // liy ble
-      estH += 14 + 14;                   // "FAKTI POU" + non
+      estH += 70;                        // blòk logo / biznis / FAKTI
+      estH += 22;                        // liy ble + espas
+      estH += 28;                        // "FAKTI POU" + non kliyan
       if (invoice.client?.phone) estH += 12;
       if (invoice.client?.address) estH += 12;
       estH += 12;                        // espas
-      estH += tableHeadH;                // antèt tab
-      estH += items.length * rowH;       // liy atik
-      estH += 10 + 18;                   // liy separatè + espas
-      estH += totalLines * 17 + 4;       // liy total yo
-      estH += 40;                        // pye paj + ti espas
-      const pageH = Math.max(estH, 240);
+      estH += tableHeadH;
+      estH += items.length * rowH;
+      estH += 28;                        // liy separatè + espas
+      estH += totalLines * 18;           // liy total yo
+      estH += 50;                        // pye paj
+      const pageH = Math.max(estH, 300);
 
-      const doc = new jsPDF({ unit: 'pt', format: [pageW, pageH] });
+      // IMPÒTAN: di jsPDF oryantasyon an eksplisitman. Si wotè < lajè epi nou kite
+      // "portrait" pa default, jsPDF vire dimansyon yo (paj la vin etwat + twò wo).
+      const doc = new jsPDF({
+        unit: 'pt',
+        format: [pageW, pageH],
+        orientation: pageH < pageW ? 'landscape' : 'portrait',
+      });
+
       let y = margin;
 
       // ---- Logo ----
@@ -479,7 +481,7 @@ export default function InvoiceDetailPage() {
       doc.text('ATIK', margin + 10, y + 16);
       doc.text('QTE', colQty, y + 16, { align: 'right' });
       doc.text('PRI', colPrice, y + 16, { align: 'right' });
-      doc.text('TOTAL', colTotal - 10, y + 16, { align: 'right' });
+      doc.text('TOTAL', colTotal, y + 16, { align: 'right' });
       y += tableHeadH;
 
       // ---- Liy atik ----
@@ -494,7 +496,7 @@ export default function InvoiceDetailPage() {
         doc.text(String(it.name), margin + 10, y + 15);
         doc.text(String(it.quantity), colQty, y + 15, { align: 'right' });
         doc.text(pdfMoney(it.unit_price), colPrice, y + 15, { align: 'right' });
-        doc.text(pdfMoney(it.quantity * it.unit_price), colTotal - 10, y + 15, { align: 'right' });
+        doc.text(pdfMoney(it.quantity * it.unit_price), colTotal, y + 15, { align: 'right' });
         y += rowH;
       });
 
@@ -504,15 +506,15 @@ export default function InvoiceDetailPage() {
       doc.line(colQty - 40, y, rightX, y);
       y += 18;
 
-      // ---- Totals ----
+      // ---- Total yo ----
       const line = (label: string, val: string, opts?: { bold?: boolean; size?: number; color?: [number, number, number] }) => {
         doc.setFontSize(opts?.size ?? 10);
         doc.setFont('helvetica', opts?.bold ? 'bold' : 'normal');
         if (opts?.color) doc.setTextColor(opts.color[0], opts.color[1], opts.color[2]);
         else doc.setTextColor(60);
         doc.text(label, colPrice, y, { align: 'right' });
-        doc.text(val, colTotal - 10, y, { align: 'right' });
-        y += opts?.bold ? 19 : 17;
+        doc.text(val, colTotal, y, { align: 'right' });
+        y += 18;
       };
 
       if (discount > 0) {
@@ -534,7 +536,7 @@ export default function InvoiceDetailPage() {
       }
 
       // ---- Pye paj (jis anba kontni an) ----
-      const footY = pageH - 18;
+      const footY = pageH - 20;
       doc.setDrawColor(230);
       doc.setLineWidth(0.5);
       doc.line(margin, footY - 14, rightX, footY - 14);
