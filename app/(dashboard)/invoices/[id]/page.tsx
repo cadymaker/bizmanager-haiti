@@ -343,7 +343,7 @@ export default function InvoiceDetailPage() {
       : invoice?.metadata?.discount ?? 0
   );
 
-  async function downloadPDF() {
+   async function downloadPDF() {
     if (!invoice) return;
     setDownloading(true);
 
@@ -353,23 +353,15 @@ export default function InvoiceDetailPage() {
       const pageW = 595.28; // A4 lajè an pt
       const margin = 40;
 
-      // Fòma lajan ki rann byen nan PDF (espas nòmal, pa espas-ensekab Intl la ki parèt tankou "/")
       const pdfMoney = (n: number) => {
         const rounded = Math.round((Number(n) + Number.EPSILON) * 100) / 100;
         const hasDecimals = rounded % 1 !== 0;
         const parts = rounded.toFixed(hasDecimals ? 2 : 0).split('.');
-        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' '); // separatè milye = espas nòmal
+        parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
         return parts.join('.') + ' ' + sym;
       };
 
       const items = invoice.metadata?.items ?? [];
-
-      // ---- 1) Kalkile wotè total la DABÒ (pou paj dinamik, san espas blan) ----
-      const headerH = 90;
-      const clientH = 70;
-      const tableHeadH = 24;
-      const rowH = 22;
-      const rowsH = items.length * rowH;
 
       const rawTotal = items.reduce((s, it) => s + it.quantity * it.unit_price, 0);
       const discount = Number(
@@ -377,19 +369,42 @@ export default function InvoiceDetailPage() {
           ? invoice.discount_amount
           : invoice.metadata?.discount ?? 0
       );
-      let totalLines = 1; // Total toujou
-      if (discount > 0) totalLines += 2;         // Sou-total + Rabè
-      if (invoice.amount_paid > 0) totalLines += 2; // Peye + Balans
-      const totalsH = 28 + totalLines * 18;
-      const footerH = 60;
 
-      const contentH = margin + headerH + clientH + 12 + tableHeadH + rowsH + totalsH + footerH;
-      const pageH = Math.max(contentH, 260);
+      // Pozisyon kolòn yo (TOTAL kole nan bò dwat la, rès yo sòti agoch)
+      const rightX = pageW - margin;       // bò dwat tab la
+      const colTotal = rightX;             // TOTAL (aligne adwat)
+      const colPrice = rightX - 115;       // PRI
+      const colQty = rightX - 210;         // QTE
+
+      const rowH = 22;
+      const tableHeadH = 24;
+
+      // ---- Kalkile wotè kontni reyèl la (pou paj dinamik) ----
+      // n ap konstwi tout bagay, mezire y final la, APRE sa kreye paj la —
+      // men jsPDF mande wotè a davans. Donk n ap estime jis.
+      let totalLines = 1;                          // Total
+      if (discount > 0) totalLines += 2;           // Sou-total + Rabè
+      if (invoice.amount_paid > 0) totalLines += 2; // Peye + Balans
+
+      // Estimasyon wotè (akòde ak kontni reyèl la)
+      let estH = margin;                 // tèt
+      estH += 70;                        // blòk logo/biznis/FAKTI
+      estH += 22;                        // liy ble
+      estH += 14 + 14;                   // "FAKTI POU" + non
+      if (invoice.client?.phone) estH += 12;
+      if (invoice.client?.address) estH += 12;
+      estH += 12;                        // espas
+      estH += tableHeadH;                // antèt tab
+      estH += items.length * rowH;       // liy atik
+      estH += 10 + 18;                   // liy separatè + espas
+      estH += totalLines * 17 + 4;       // liy total yo
+      estH += 40;                        // pye paj + ti espas
+      const pageH = Math.max(estH, 240);
 
       const doc = new jsPDF({ unit: 'pt', format: [pageW, pageH] });
       let y = margin;
 
-      // ---- 2) Logo ----
+      // ---- Logo ----
       if (biz?.logo_url) {
         try {
           const res = await fetch(biz.logo_url);
@@ -422,19 +437,19 @@ export default function InvoiceDetailPage() {
       doc.setTextColor(37, 99, 235);
       doc.setFontSize(22);
       doc.setFont('helvetica', 'bold');
-      doc.text('FAKTI', pageW - margin, y + 18, { align: 'right' });
+      doc.text('FAKTI', rightX, y + 18, { align: 'right' });
 
       doc.setTextColor(60);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'normal');
-      doc.text(invoice.invoice_number, pageW - margin, y + 36, { align: 'right' });
-      doc.text(formatInvoiceDate(invoice.issue_date), pageW - margin, y + 50, { align: 'right' });
+      doc.text(invoice.invoice_number, rightX, y + 36, { align: 'right' });
+      doc.text(formatInvoiceDate(invoice.issue_date), rightX, y + 50, { align: 'right' });
 
       y = Math.max(by, y + 70);
 
       doc.setDrawColor(37, 99, 235);
       doc.setLineWidth(1.5);
-      doc.line(margin, y, pageW - margin, y);
+      doc.line(margin, y, rightX, y);
       y += 22;
 
       // ---- Kliyan ----
@@ -456,12 +471,8 @@ export default function InvoiceDetailPage() {
       y += 12;
 
       // ---- Antèt tab ----
-      const colQty = pageW - margin - 260;
-      const colPrice = pageW - margin - 150;
-      const colTotal = pageW - margin;
-
       doc.setFillColor(37, 99, 235);
-      doc.rect(margin, y, pageW - margin * 2, tableHeadH, 'F');
+      doc.rect(margin, y, rightX - margin, tableHeadH, 'F');
       doc.setTextColor(255);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
@@ -477,7 +488,7 @@ export default function InvoiceDetailPage() {
       items.forEach((it, i) => {
         if (i % 2 === 1) {
           doc.setFillColor(248, 250, 252);
-          doc.rect(margin, y, pageW - margin * 2, rowH, 'F');
+          doc.rect(margin, y, rightX - margin, rowH, 'F');
         }
         doc.setTextColor(30);
         doc.text(String(it.name), margin + 10, y + 15);
@@ -490,7 +501,7 @@ export default function InvoiceDetailPage() {
       y += 10;
       doc.setDrawColor(220);
       doc.setLineWidth(0.5);
-      doc.line(colQty - 40, y, pageW - margin, y);
+      doc.line(colQty - 40, y, rightX, y);
       y += 18;
 
       // ---- Totals ----
@@ -501,7 +512,7 @@ export default function InvoiceDetailPage() {
         else doc.setTextColor(60);
         doc.text(label, colPrice, y, { align: 'right' });
         doc.text(val, colTotal - 10, y, { align: 'right' });
-        y += opts?.bold ? 20 : 16;
+        y += opts?.bold ? 19 : 17;
       };
 
       if (discount > 0) {
@@ -523,10 +534,10 @@ export default function InvoiceDetailPage() {
       }
 
       // ---- Pye paj (jis anba kontni an) ----
-      const footY = pageH - 24;
+      const footY = pageH - 18;
       doc.setDrawColor(230);
       doc.setLineWidth(0.5);
-      doc.line(margin, footY - 16, pageW - margin, footY - 16);
+      doc.line(margin, footY - 14, rightX, footY - 14);
       doc.setFontSize(9);
       doc.setTextColor(130);
       doc.setFont('helvetica', 'normal');
