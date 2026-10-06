@@ -14,6 +14,7 @@ const nav = [
   { href: '/cash-history', label: 'Istwa Kès' },
   { href: '/reports', label: 'Rapò & Statistik' },
   { href: '/team', label: 'Itilizatè' },
+  { href: '/audit', label: 'Istwa aktivite' },
   { href: '/subscribe', label: 'Achte lisans' },
   { href: '/settings', label: 'Paramèt' },
 ];
