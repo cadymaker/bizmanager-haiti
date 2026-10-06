@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Business } from '@/types';
+import AdminMetrics from '@/components/AdminMetrics';
 
 interface PaymentRequest {
   id: string;
@@ -23,6 +24,8 @@ export default function AdminDashboard() {
   const [selected, setSelected] = useState<Business | null>(null);
   const [duration, setDuration] = useState<'30days' | '90days' | '1year'>('30days');
   const [code, setCode] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const [processing, setProcessing] = useState<string | null>(null);
@@ -35,6 +38,16 @@ export default function AdminDashboard() {
   const [deleteErr, setDeleteErr] = useState('');
 
   useEffect(() => { load(); }, []);
+
+  // Fèmen fenèt kòd la ak touch Échap
+  useEffect(() => {
+    if (!selected) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeCodeModal();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected]);
 
   async function load() {
     setLoading(true);
@@ -175,11 +188,27 @@ export default function AdminDashboard() {
     }
   }
 
+  // ===== Jenere kòd =====
+  function openCodeModal(b: Business) {
+    setSelected(b);
+    setDuration('30days');
+    setCode(null);
+    setCopied(false);
+  }
+
+  function closeCodeModal() {
+    setSelected(null);
+    setCode(null);
+    setCopied(false);
+  }
+
   async function generate() {
     if (!selected) return;
+    setGenerating(true);
+    setCopied(false);
     const supabase = createClient();
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session) return;
+    if (!session) { setGenerating(false); return; }
     const res = await fetch('/api/admin/generate-code', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
@@ -187,6 +216,16 @@ export default function AdminDashboard() {
     });
     const data = await res.json();
     if (res.ok) { setCode(data.code); } else { setCode('Erè: ' + (data.error ?? 'pa ka jenere')); }
+    setGenerating(false);
+  }
+
+  async function copyCode() {
+    if (!code) return;
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* inyore */ }
   }
 
   function buildMessage() {
@@ -220,10 +259,10 @@ export default function AdminDashboard() {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Admin — Tout biznis</h1>
+          <h1 className="text-2xl font-semibold text-gray-900">Pannèl Admin</h1>
           <p className="text-sm text-gray-500 mt-1">{businesses.length} biznis enskri</p>
         </div>
-               <div className="flex gap-2">
+        <div className="flex gap-2">
           <a href="/admin/feedback" className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 whitespace-nowrap">
             💬 Feedback
           </a>
@@ -237,20 +276,8 @@ export default function AdminDashboard() {
         <div className="bg-blue-50 text-blue-700 text-sm rounded-lg p-3">{msg}</div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-gray-500 uppercase">Esè aktif</p>
-          <p className="text-2xl font-semibold mt-1">{businesses.filter(b => b.license_status === 'trial').length}</p>
-        </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-gray-500 uppercase">Lisans aktif</p>
-          <p className="text-2xl font-semibold mt-1 text-green-600">{businesses.filter(b => b.license_status === 'active').length}</p>
-        </div>
-        <div className="bg-white rounded-xl border p-4">
-          <p className="text-xs text-gray-500 uppercase">Ekspire</p>
-          <p className="text-2xl font-semibold mt-1 text-red-600">{businesses.filter(b => b.license_status === 'expired').length}</p>
-        </div>
-      </div>
+      {/* ===== METRIK ===== */}
+      <AdminMetrics />
 
       {requests.length > 0 && (
         <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
@@ -294,76 +321,79 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border overflow-x-auto">
-        <table className="w-full text-sm min-w-[680px]">
-          <thead>
-            <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
-              <th className="px-4 py-3">Biznis</th>
-              <th className="px-4 py-3">Imèl</th>
-              <th className="px-4 py-3">Niche</th>
-              <th className="px-4 py-3">Estati</th>
-              <th className="px-4 py-3">Aksyon</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {loading && (
-              <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
-            )}
-            {businesses.map(b => (
-              <tr key={b.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900">{b.business_name}</div>
-                  <div className="text-xs text-gray-400">{b.owner_name}</div>
-                </td>
-                <td className="px-4 py-3 text-gray-500">{b.email}</td>
-                <td className="px-4 py-3 capitalize text-gray-700">{b.niche}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      b.license_status === 'active' ? 'bg-green-100 text-green-700' :
-                      b.license_status === 'trial' ? 'bg-amber-100 text-amber-700' :
-                      'bg-red-100 text-red-700'
-                    }`}>
-                      {b.license_status === 'trial' ? `Esè — ${daysLeft(b.trial_start_date)}j` :
-                       b.license_status === 'active' ? 'Aktif' : 'Ekspire'}
-                    </span>
-                    {twoFAIds.has(b.id) && (
-                      <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">🔒 2FA</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2 flex-wrap">
-                    <button onClick={() => { setSelected(b); setCode(null); }}
-                      className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 whitespace-nowrap">
-                      Jenere kòd
-                    </button>
-                    {b.license_status === 'active' && !b.is_admin && (
-                      <button onClick={() => revokeLicense(b.id, b.business_name)}
-                        disabled={processing === b.id}
-                        className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 disabled:opacity-50">
-                        {processing === b.id ? '...' : 'Revoke'}
-                      </button>
-                    )}
-                    {twoFAIds.has(b.id) && (
-                      <button onClick={() => disable2FA(b.id, b.business_name)}
-                        disabled={processing === b.id}
-                        className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs hover:bg-indigo-200 disabled:opacity-50 whitespace-nowrap">
-                        {processing === b.id ? '...' : 'Dezaktive 2FA'}
-                      </button>
-                    )}
-                    {!b.is_admin && (
-                      <button onClick={() => openDelete(b)}
-                        className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 whitespace-nowrap">
-                        🗑️ Efase
-                      </button>
-                    )}
-                  </div>
-                </td>
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-3">Tout biznis</h2>
+        <div className="bg-white rounded-xl border overflow-x-auto">
+          <table className="w-full text-sm min-w-[680px]">
+            <thead>
+              <tr className="text-left text-xs uppercase text-gray-400 bg-gray-50">
+                <th className="px-4 py-3">Biznis</th>
+                <th className="px-4 py-3">Imèl</th>
+                <th className="px-4 py-3">Niche</th>
+                <th className="px-4 py-3">Estati</th>
+                <th className="px-4 py-3">Aksyon</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading && (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-gray-400">Chajman...</td></tr>
+              )}
+              {businesses.map(b => (
+                <tr key={b.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-900">{b.business_name}</div>
+                    <div className="text-xs text-gray-400">{b.owner_name}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{b.email}</td>
+                  <td className="px-4 py-3 capitalize text-gray-700">{b.niche}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        b.license_status === 'active' ? 'bg-green-100 text-green-700' :
+                        b.license_status === 'trial' ? 'bg-amber-100 text-amber-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {b.license_status === 'trial' ? `Esè — ${daysLeft(b.trial_start_date)}j` :
+                         b.license_status === 'active' ? 'Aktif' : 'Ekspire'}
+                      </span>
+                      {twoFAIds.has(b.id) && (
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700">🔒 2FA</span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2 flex-wrap">
+                      <button onClick={() => openCodeModal(b)}
+                        className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs hover:bg-amber-700 whitespace-nowrap">
+                        Jenere kòd
+                      </button>
+                      {b.license_status === 'active' && !b.is_admin && (
+                        <button onClick={() => revokeLicense(b.id, b.business_name)}
+                          disabled={processing === b.id}
+                          className="px-3 py-1.5 bg-red-100 text-red-700 rounded-lg text-xs hover:bg-red-200 disabled:opacity-50">
+                          {processing === b.id ? '...' : 'Revoke'}
+                        </button>
+                      )}
+                      {twoFAIds.has(b.id) && (
+                        <button onClick={() => disable2FA(b.id, b.business_name)}
+                          disabled={processing === b.id}
+                          className="px-3 py-1.5 bg-indigo-100 text-indigo-700 rounded-lg text-xs hover:bg-indigo-200 disabled:opacity-50 whitespace-nowrap">
+                          {processing === b.id ? '...' : 'Dezaktive 2FA'}
+                        </button>
+                      )}
+                      {!b.is_admin && (
+                        <button onClick={() => openDelete(b)}
+                          className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs hover:bg-red-700 whitespace-nowrap">
+                          🗑️ Efase
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ===== MODAL EFASE BIZNIS ===== */}
@@ -425,39 +455,58 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* ===== MODAL JENERE KÒD (nan mitan ekran an) ===== */}
       {selected && (
-        <div style={{ minHeight: '400px', background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '12px' }}>
-          <div className="bg-white rounded-xl p-6 w-80 space-y-4">
-            <h2 className="font-semibold text-gray-900">Kòd pou {selected.business_name}</h2>
-            <div className="flex gap-2">
-              <button onClick={() => { setDuration('30days'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '30days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                30 jou
-              </button>
-              <button onClick={() => { setDuration('90days'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '90days' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                90 jou
-              </button>
-              <button onClick={() => { setDuration('1year'); setCode(null); }}
-                className={`flex-1 py-2 rounded-lg text-xs border ${duration === '1year' ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-200 hover:bg-gray-50 text-gray-700'}`}>
-                1 an
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={closeCodeModal}>
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 space-y-4 shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-between items-start gap-3">
+              <div className="min-w-0">
+                <h2 className="font-semibold text-gray-900">Jenere kòd aktivasyon</h2>
+                <p className="text-sm text-gray-500 truncate mt-0.5">{selected.business_name}</p>
+              </div>
+              <button onClick={closeCodeModal} aria-label="Fèmen"
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none -mt-1">
+                ×
               </button>
             </div>
-            <button onClick={generate}
-              className="w-full py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">
-              Jenere kòd aktivasyon
+
+            <div>
+              <p className="text-xs text-gray-500 font-medium mb-2">Dire lisans lan</p>
+              <div className="flex gap-2">
+                {([
+                  ['30days', '30 jou'],
+                  ['90days', '90 jou'],
+                  ['1year', '1 an'],
+                ] as ['30days' | '90days' | '1year', string][]).map(([val, label]) => (
+                  <button key={val} onClick={() => { setDuration(val); setCode(null); setCopied(false); }}
+                    className={`flex-1 py-2 rounded-lg text-xs font-medium border ${
+                      duration === val
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-gray-200 hover:bg-gray-50 text-gray-700'
+                    }`}>
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={generate} disabled={generating}
+              className="w-full py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50">
+              {generating ? 'Ap jenere...' : 'Jenere kòd aktivasyon'}
             </button>
+
             {code && !code.startsWith('Erè') && (
               <div className="bg-gray-50 rounded-lg p-4 text-center space-y-3">
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Kòd pou voye bay kliyan:</p>
                   <p className="font-mono font-bold text-blue-700 text-base select-all break-all">{code}</p>
-                  <button onClick={() => navigator.clipboard.writeText(code)}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline">
-                    Kopye kòd la
+                  <button onClick={copyCode}
+                    className="mt-2 text-xs text-gray-500 hover:text-gray-800 underline">
+                    {copied ? 'Kopye ✓' : 'Kopye kòd la'}
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+                <div className="grid grid-cols-2 gap-2 pt-3 border-t border-gray-200">
                   <a href={buildWhatsAppLink()} target="_blank" rel="noopener noreferrer"
                     className="flex items-center justify-center py-2 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-700">
                     WhatsApp
@@ -469,11 +518,13 @@ export default function AdminDashboard() {
                 </div>
               </div>
             )}
+
             {code && code.startsWith('Erè') && (
               <div className="bg-red-50 rounded-lg p-3 text-center text-sm text-red-600">{code}</div>
             )}
-            <button onClick={() => { setSelected(null); setCode(null); }}
-              className="w-full py-2 text-gray-500 text-sm hover:bg-gray-50 rounded-lg">
+
+            <button onClick={closeCodeModal}
+              className="w-full py-2.5 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200">
               Fèmen
             </button>
           </div>
