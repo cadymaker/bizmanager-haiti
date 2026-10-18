@@ -48,6 +48,14 @@ function fmtDate(iso: string): string {
   return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+// Jwenn ekstansyon fichye a (selon tip la si non an pa gen ekstansyon)
+function fileExt(file: File): string {
+  const fromName = file.name.includes('.') ? file.name.split('.').pop() : '';
+  if (fromName) return fromName.toLowerCase();
+  const fromType = file.type.split('/')[1];
+  return (fromType || 'jpg').toLowerCase();
+}
+
 export default function InventoryPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [currency, setCurrency] = useState('HTG');
@@ -134,35 +142,44 @@ export default function InventoryPage() {
   }
 
   async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
 
     if (file.size > 2 * 1024 * 1024) {
-      setMsg('Imaj la twò gwo (maksimòm 2MB).');
+      setMsg('Erè: Imaj la twò gwo (maksimòm 2MB).');
+      input.value = '';
       return;
     }
 
     setUploading(true);
     const supabase = createClient();
     const ctx = await getBusinessContext();
-    if (!ctx) { setUploading(false); return; }
+    if (!ctx) { setUploading(false); input.value = ''; return; }
 
-    const ext = file.name.split('.').pop();
-    const fileName = `${ctx.businessId}/${Date.now()}.${ext}`;
+    // Non inik chak fwa → pa janm gen konfli, pa bezwen upsert
+    const rand = Math.random().toString(36).slice(2, 8);
+    const fileName = `${ctx.businessId}/${Date.now()}-${rand}.${fileExt(file)}`;
 
     const { error: upErr } = await supabase.storage
       .from('products')
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, file, {
+        upsert: false,
+        contentType: file.type || 'image/jpeg',
+        cacheControl: '3600',
+      });
 
     if (upErr) {
       setMsg('Erè upload: ' + upErr.message);
       setUploading(false);
+      input.value = '';
       return;
     }
 
     const { data: urlData } = supabase.storage.from('products').getPublicUrl(fileName);
     setForm(f => ({ ...f, image_url: urlData.publicUrl }));
     setUploading(false);
+    input.value = '';
   }
 
   function generateBarcode() {
@@ -372,7 +389,7 @@ export default function InventoryPage() {
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) { setMsg('Non pwodwi obligatwa.'); return; }
+    if (!form.name.trim()) { setMsg('Erè: Non pwodwi obligatwa.'); return; }
 
     const supabase = createClient();
     const ctx = await getBusinessContext();
@@ -425,6 +442,8 @@ export default function InventoryPage() {
   const totalVarieties = products.length;
   const totalItems = products.reduce((s, p) => s + p.quantity, 0);
 
+  const msgIsError = msg.startsWith('Erè');
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap justify-between items-center gap-2">
@@ -441,7 +460,11 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {msg && <div className="bg-green-50 text-green-700 text-sm rounded-lg p-3">{msg}</div>}
+      {msg && (
+        <div className={`text-sm rounded-lg p-3 ${msgIsError ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+          {msg}
+        </div>
+      )}
 
       {pendingSales > 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800 flex items-center justify-between gap-2">
@@ -482,10 +505,16 @@ export default function InventoryPage() {
             </div>
             <div>
               <label className="text-xs text-gray-500 font-medium">Foto pwodwi (opsyonèl)</label>
-              <input type="file" accept="image/*" onChange={handleImageUpload}
-                className="block mt-1 text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-xs hover:file:bg-blue-100" />
+              <input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading}
+                className="block mt-1 text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-700 file:text-xs hover:file:bg-blue-100 disabled:opacity-50" />
               {uploading && <p className="text-xs text-blue-600 mt-1">Ap upload...</p>}
               <p className="text-xs text-gray-400 mt-1">PNG, JPG — max 2MB</p>
+              {form.image_url && !uploading && (
+                <button type="button" onClick={() => setForm(f => ({ ...f, image_url: '' }))}
+                  className="text-xs text-red-600 hover:underline mt-1">
+                  Retire foto a
+                </button>
+              )}
             </div>
           </div>
 
